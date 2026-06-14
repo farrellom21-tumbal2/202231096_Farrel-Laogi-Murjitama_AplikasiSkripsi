@@ -1,0 +1,583 @@
+"""
+FACE ANALYSIS ENGINE - Real-time face violation detection (STABLE VERSION)
+Integrated with app.py for multi-participant analysis
+Uses InsightFace like realtime_proctoring_stable_highfps.py
+"""
+import cv2
+import numpy as np
+import time
+import threading
+import tempfile
+import urllib.request
+from datetime import datetime
+from insightface.app import FaceAnalysis
+from gaze_tracking import GazeTracking
+from ultralytics import YOLO
+import os
+from dotenv import load_dotenv
+import cloudinary
+import cloudinary.uploader
+import mysql.connector
+from mysql.connector import Error
+import traceback
+
+load_dotenv()
+
+# ============ CONFIG ============
+YOLO_MODEL = os.getenv("YOLO_MODEL", "yolov8_final.pt")
+CONF_THRES = float(os.getenv("CONF_THRES", 0.5))
+FRAME_WIDTH = int(os.getenv("FRAME_WIDTH", 640))
+FRAME_HEIGHT = int(os.getenv("FRAME_HEIGHT", 480))
+YOLO_INTERVAL = int(os.getenv("YOLO_INTERVAL", 2))
+FACE_INTERVAL = int(os.getenv("FACE_INTERVAL", 10))
+GAZE_INTERVAL = int(os.getenv("GAZE_INTERVAL", 3))
+# Cosine similarity threshold (0-1 range, lower = stricter)
+# 0.45 = strict (recommended), 0.5 = normal, 0.6 = lenient
+SIM_THRESHOLD = float(os.getenv("SIM_THRESHOLD", 0.45))
+VIOLATION_DURATION = int(os.getenv("VIOLATION_DURATION", 3))
+CLOUDINARY_FOLDER = os.getenv("CLOUDINAR_MAIN_FOLDER", "proctoring_app/")
+
+# Database config
+DB_CONFIG = {
+    'host': os.getenv('DB_HOST'),
+    'port': os.getenv('DB_PORT'),
+    'database': os.getenv('DB_NAME'),
+    'user': os.getenv('DB_USER'),
+    'password': os.getenv('DB_PASSWORD')
+}
+
+# YOLO Classes
+YOLO_CLASSES = {
+    0: "face_normal",
+    1: "face_not_forward",
+    2: "multi_face",
+    3: "foreign_object"
+}
+
+print("[ANALYZER] FACE ANALYZER - INITIALIZING (STABLE VERSION)")
+
+# ============ LOAD MODELS ============
+try:
+    print("[ANALYZER] Loading YOLO model...")
+    yolo = YOLO(YOLO_MODEL)
+    yolo.fuse()
+    print("[ANALYZER] ✅ YOLO loaded")
+except Exception as e:
+    print(f"[ANALYZER] ❌ YOLO load failed: {e}")
+    yolo = None
+
+try:
+    print("[ANALYZER] Loading InsightFace model...")
+    face_app = FaceAnalysis(name="buffalo_l", providers=["CUDAExecutionProvider"])
+    face_app.prepare(ctx_id=0, det_size=(640, 640))
+    print("[ANALYZER] ✅ InsightFace loaded")
+except Exception as e:
+    print(f"[ANALYZER] ❌ InsightFace load failed: {e}")
+    face_app = None
+
+try:
+    print("[ANALYZER] Loading GazeTracking model...")
+    gaze = GazeTracking()
+    print("[ANALYZER] ✅ GazeTracking loaded")
+except Exception as e:
+    print(f"[ANALYZER] ❌ GazeTracking load failed: {e}")
+    gaze = None
+
+# ============ HELPER FUNCTIONS ============
+
+def get_db_connection():
+    """Get MySQL connection"""
+    try:
+        connection = mysql.connector.connect(**DB_CONFIG)
+        return connection
+    except Error as e:
+        print(f"[ANALYZER] Database connection error: {e}")
+        return None
+
+def cosine_similarity(a, b):
+    """Calculate cosine similarity - just like realtime_proctoring_stable_highfps.py"""
+    return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
+
+def download_ref_face(face_photo_url):
+    """Download reference face image from URL"""
+    try:
+        with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
+            urllib.request.urlretrieve(face_photo_url, tmp.name)
+            ref_img = cv2.imread(tmp.name)
+            os.unlink(tmp.name)
+            return ref_img
+    except Exception as e:
+        print(f"[ANALYZER] Error downloading ref face: {e}")
+        return None
+
+def get_ref_embedding(participant_id, face_photo_url):
+    """Get reference face embedding using InsightFace"""
+    try:
+        if not face_app:
+            print(f"[ANALYZER] ❌ InsightFace not available")
+            return None
+        
+        ref_img = download_ref_face(face_photo_url)
+        if ref_img is None:
+            print(f"[ANALYZER] ❌ Reference face image not found for participant {participant_id}")
+            return None
+        
+        # Get embedding from InsightFace (just like stable version)
+        faces = face_app.get(ref_img)
+        if len(faces) > 0:
+            ref_embedding = faces[0].embedding
+            print(f"[ANALYZER] ✅ Reference embedding loaded for participant {participant_id}")
+            return ref_embedding
+        else:
+            print(f"[ANALYZER] ⚠️ No face detected in reference photo for participant {participant_id}")
+            return None
+    except Exception as e:
+        print(f"[ANALYZER] ❌ Error getting reference embedding: {e}")
+        traceback.print_exc()
+        return None
+
+def upload_violation_evidence(frame, violation_type, participant_id, session_id):
+    """Upload violation evidence to Cloudinary"""
+    try:
+        if frame is None or frame.size == 0:
+            print(f"[ANALYZER] ❌ Invalid frame for evidence upload")
+            return None
+        
+        _, buffer = cv2.imencode('.jpg', frame)
+        
+        print(f"[ANALYZER] Uploading evidence to Cloudinary...")
+        print(f"   Frame size: {frame.shape}")
+        print(f"   Buffer size: {len(buffer)} bytes")
+        
+        result = cloudinary.uploader.upload(
+            buffer.tobytes(),
+            folder=CLOUDINARY_FOLDER + f'violations/{participant_id}/',
+            resource_type='auto',
+            quality='auto',
+            public_id=f'violation_{violation_type}_{int(time.time() * 1000)}'  # Use milliseconds for uniqueness
+        )
+        
+        if result and result.get('secure_url'):
+            url = result.get('secure_url')
+            print(f"[ANALYZER] ✅ Evidence uploaded: {url[:60]}...")
+            return url
+        else:
+            print(f"[ANALYZER] ❌ Upload succeeded but no URL in response: {result}")
+            return None
+            
+    except Exception as e:
+        print(f"[ANALYZER] ❌ Error uploading evidence: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+def log_violation_to_db(participant_id, violation_type, evidence_url, duration):
+    """Log violation to database"""
+    try:
+        conn = get_db_connection()
+        if not conn:
+            print(f"[ANALYZER] ❌ Database connection failed for violation logging")
+            return False
+        
+        cursor = conn.cursor()
+        
+        # Insert into violations table
+        insert_query = """
+            INSERT INTO violations 
+            (participant_id, violation_type, description, start_time, end_time, duration_seconds)
+            VALUES (%s, %s, %s, NOW(), NOW(), %s)
+        """
+        
+        print(f"[ANALYZER] Inserting violation: P{participant_id}, Type={violation_type}, Duration={duration}s")
+        
+        cursor.execute(insert_query, (
+            participant_id,
+            violation_type,
+            f'Face analysis violation: {violation_type}',
+            duration
+        ))
+        
+        violation_id = cursor.lastrowid
+        print(f"[ANALYZER] ✅ Violation inserted with ID: {violation_id}")
+        
+        # Insert evidence if available
+        if evidence_url:
+            evidence_query = """
+                INSERT INTO violation_evidence 
+                (violation_id, image_url)
+                VALUES (%s, %s)
+            """
+            cursor.execute(evidence_query, (violation_id, evidence_url))
+            print(f"[ANALYZER] ✅ Evidence linked: {evidence_url[:50]}...")
+        
+        conn.commit()
+        print(f"[ANALYZER] ✅ Violation committed to database")
+        cursor.close()
+        conn.close()
+        
+        return True
+    except Error as e:
+        print(f"[ANALYZER] ❌ Database error: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+# ============ ANALYZER CLASS ============
+
+class ParticipantAnalyzer:
+    """Real-time analyzer for single participant - using smart caching algorithm"""
+    
+    def __init__(self, participant_id, session_id, face_photo_url):
+        self.participant_id = participant_id
+        self.session_id = session_id
+        self.face_photo_url = face_photo_url
+        
+        # Get reference face embedding
+        self.ref_embedding = get_ref_embedding(participant_id, face_photo_url)
+        
+        # Frame counting for interval-based analysis (like realtime_proctoring_stable_highfps.py)
+        self.frame_count = 0
+        
+        # ================= CACHE (SMART CACHING FOR SMOOTH TRACKING) =================
+        self.cached_yolo = None              # (label, conf, bbox)
+        self.cached_face = None              # (bbox, match_score, is_match, distance)
+        self.cached_gaze = None              # string
+        
+        # ================= VIOLATION TRACKING =================
+        self.violation_start_time = None
+        self.current_violation_type = None
+        self.violation_evidence_count = {}  # Track screenshots per violation type
+        self.max_evidence_per_violation = 3  # Max 3 screenshots per violation type
+        self.last_logged_violations = {}      # Track last logged time per violation type
+        self.violation_cooldown = 5           # 5 seconds between logging same violation
+        
+        print(f"[ANALYZER] Participant {participant_id} initialized - smart caching with strict face recognition (threshold={SIM_THRESHOLD})")
+    
+    def _run_yolo_inference(self, frame):
+        """Run YOLO inference (can be parallel)"""
+        try:
+            results = yolo(
+                frame,
+                conf=CONF_THRES,
+                device=0,
+                half=True,
+                imgsz=640,
+                verbose=False
+            )
+            
+            if results and results[0].boxes:
+                best = max(results[0].boxes, key=lambda b: float(b.conf[0]))
+                cls_id = int(best.cls[0])
+                label = YOLO_CLASSES.get(cls_id, "face_normal")
+                conf = float(best.conf[0])
+                bbox = tuple(map(int, best.xyxy[0].tolist()))
+                return (label, conf, bbox)
+            return None
+        except Exception as e:
+            print(f"[ANALYZER] YOLO error: {e}")
+            return None
+    
+    def _run_gaze_tracking(self, frame):
+        """Run gaze tracking analysis"""
+        if not gaze:
+            return None
+        
+        try:
+            gaze.refresh(frame)
+            
+            if gaze.is_left() or gaze.is_right():
+                return 'eyes_looking_away'
+            elif gaze.is_blinking():
+                return 'blinking'
+            return None
+        except Exception as e:
+            print(f"[ANALYZER] Gaze tracking error: {e}")
+            return None
+    
+    def analyze_frame(self, frame):
+        """
+        Analyze single frame using SMART CACHING like realtime_proctoring_stable_highfps.py
+        - YOLO analysis every 2 frames
+        - Face recognition every 10 frames  
+        - Gaze tracking every 3 frames
+        - Render cached results on EVERY frame (smooth tracking)
+        """
+        self.frame_count += 1
+        violations = []
+        
+        # Analysis result to return with bounding boxes
+        analysis_result = {
+            'yolo_class': 'face_normal',
+            'yolo_conf': 0,
+            'yolo_bbox': None,
+            'face_similarity': -1,
+            'face_bbox': None,
+            'gaze_state': None,
+            'violations': [],
+            'face_status': 'face_normal',
+            'frame_count': self.frame_count,
+            'best_boxes': []
+        }
+        
+        # ================= YOLO ANALYSIS (Every 2 frames) =================
+        if self.frame_count % YOLO_INTERVAL == 0 and yolo:
+            try:
+                results = yolo(
+                    frame,
+                    conf=CONF_THRES,
+                    device=0,
+                    half=True,
+                    imgsz=640,
+                    verbose=False
+                )
+                
+                if results and results[0].boxes:
+                    # Get best (most confident) detection
+                    best = max(results[0].boxes, key=lambda b: float(b.conf[0]))
+                    cls_id = int(best.cls[0])
+                    label = YOLO_CLASSES[cls_id]
+                    bbox = tuple(map(int, best.xyxy[0]))
+                    conf = float(best.conf[0])
+                    self.cached_yolo = (label, conf, bbox)
+                else:
+                    self.cached_yolo = None
+            except Exception as e:
+                print(f"[ANALYZER] YOLO error: {e}")
+                self.cached_yolo = None
+        
+        # ================= FACE RECOGNITION (Every 10 frames) =================
+        if self.frame_count % FACE_INTERVAL == 0 and face_app and self.ref_embedding is not None:
+            try:
+                faces = face_app.get(frame)
+                if len(faces) == 1:
+                    face = faces[0]
+                    sim = cosine_similarity(face.embedding, self.ref_embedding)
+                    bbox = tuple(map(int, face.bbox))
+                    self.cached_face = (bbox, sim)
+                else:
+                    self.cached_face = None
+                    if len(faces) == 0:
+                        violations.append("no_face_detected")
+                    else:
+                        violations.append("multi_face")
+            except Exception as e:
+                print(f"[ANALYZER] Face detection error: {e}")
+                self.cached_face = None
+        
+        # ================= GAZE TRACKING (Every 3 frames) =================
+        if self.frame_count % GAZE_INTERVAL == 0 and gaze:
+            try:
+                gaze.refresh(frame)
+                if gaze.is_left() or gaze.is_right():
+                    self.cached_gaze = 'eyes_looking_away'
+                elif gaze.is_blinking():
+                    self.cached_gaze = 'blinking'
+                else:
+                    self.cached_gaze = None
+            except Exception as e:
+                print(f"[ANALYZER] Gaze tracking error: {e}")
+                self.cached_gaze = None
+        
+        # ================= RENDER WITH CACHED DATA (Every frame for smooth tracking) =================
+        best_boxes = []
+        
+        # Priority 1: YOLO detection
+        if self.cached_yolo:
+            label, conf, (x1, y1, x2, y2) = self.cached_yolo
+            analysis_result['yolo_class'] = label
+            analysis_result['yolo_conf'] = conf
+            analysis_result['yolo_bbox'] = (x1, y1, x2, y2)
+            
+            if label != "face_normal":
+                # YOLO violation
+                violations.append(label)
+                analysis_result['face_status'] = label
+                best_boxes.append({
+                    'type': 'yolo_violation',
+                    'label': label,
+                    'conf': conf,
+                    'bbox': (x1, y1, x2, y2),
+                    'priority': 10  # Highest priority
+                })
+            else:
+                # Normal face from YOLO
+                analysis_result['face_status'] = 'face_normal'
+                best_boxes.append({
+                    'type': 'yolo_normal',
+                    'label': f'{label}',
+                    'conf': conf,
+                    'bbox': (x1, y1, x2, y2),
+                    'priority': 5
+                })
+        else:
+            # No YOLO detection
+            analysis_result['yolo_class'] = 'no_face_detected'
+            analysis_result['face_status'] = 'no_face_detected'
+            violations.append("no_face_detected")
+        
+        # Priority 2: Face recognition (InsightFace - cosine similarity)
+        if self.cached_face:
+            (x1, y1, x2, y2), sim = self.cached_face
+            analysis_result['face_similarity'] = sim
+            analysis_result['face_bbox'] = (x1, y1, x2, y2)
+            
+            if sim < SIM_THRESHOLD:
+                # FACE MISMATCH - Different person
+                violations.append("face_mismatch")
+                analysis_result['face_status'] = 'face_mismatch'
+                print(f"[ANALYZER] 🚨 FACE MISMATCH! Similarity: {sim:.4f} < {SIM_THRESHOLD}")
+                best_boxes.append({
+                    'type': 'face_mismatch',
+                    'label': f'Mismatch {sim:.3f}',
+                    'conf': sim,
+                    'bbox': (x1, y1, x2, y2),
+                    'priority': 9
+                })
+            else:
+                # FACE AUTHENTICATED - Correct person
+                analysis_result['face_status'] = 'face_authenticated'
+                print(f"[ANALYZER] ✅ Face authenticated! Similarity: {sim:.4f} >= {SIM_THRESHOLD}")
+                best_boxes.append({
+                    'type': 'face_ok',
+                    'label': f'OK {sim:.3f}',
+                    'conf': sim,
+                    'bbox': (x1, y1, x2, y2),
+                    'priority': 3
+                })
+        
+        # Priority 3: Gaze tracking
+        if self.cached_gaze:
+            analysis_result['gaze_state'] = self.cached_gaze
+            if self.cached_gaze == 'eyes_looking_away':
+                violations.append("eyes_looking_away")
+            elif self.cached_gaze == 'blinking':
+                violations.append("blinking")
+        
+        # ================= OPTIMIZATION: Limit to 2 BEST boxes only =================
+        # Sort by priority descending
+        best_boxes.sort(key=lambda x: x['priority'], reverse=True)
+        # Keep only top 2 boxes
+        analysis_result['best_boxes'] = best_boxes[:2]
+        
+        analysis_result['violations'] = list(set(violations))
+        return analysis_result
+    
+    def process_violations(self, analysis_result, frame):
+        """Process detected violations and log if duration threshold exceeded"""
+        violations = analysis_result.get('violations', [])
+        current_time = time.time()
+        
+        if not violations:
+            # Reset violation tracking if no violations
+            self.violation_start_time = None
+            self.current_violation_type = None
+            return False
+        
+        # Get primary violation type
+        primary_violation = violations[0]
+        
+        # Check if violation type changed
+        if primary_violation != self.current_violation_type:
+            self.violation_start_time = current_time
+            self.current_violation_type = primary_violation
+            # Reset evidence count for new violation type
+            if primary_violation not in self.violation_evidence_count:
+                self.violation_evidence_count[primary_violation] = 0
+            print(f"[ANALYZER] New violation detected: {primary_violation}")
+            return False
+        
+        # Calculate violation duration
+        if self.violation_start_time:
+            duration = current_time - self.violation_start_time
+            
+            # Log violation if duration exceeds threshold AND cooldown passed
+            if duration >= VIOLATION_DURATION:
+                # Check cooldown to avoid logging same violation too frequently
+                last_logged = self.last_logged_violations.get(primary_violation, 0)
+                time_since_last_log = current_time - last_logged
+                
+                if time_since_last_log >= self.violation_cooldown:
+                    # Check if we haven't exceeded max screenshots for this violation type
+                    if self.violation_evidence_count.get(primary_violation, 0) < self.max_evidence_per_violation:
+                        # Upload evidence
+                        evidence_url = upload_violation_evidence(
+                            frame,
+                            primary_violation,
+                            self.participant_id,
+                            self.session_id
+                        )
+                        
+                        # Log to database
+                        log_violation_to_db(
+                            self.participant_id,
+                            primary_violation,
+                            evidence_url,
+                            int(duration)
+                        )
+                        
+                        # Update tracking
+                        self.violation_evidence_count[primary_violation] = \
+                            self.violation_evidence_count.get(primary_violation, 0) + 1
+                        self.last_logged_violations[primary_violation] = current_time
+                        
+                        print(f"[ANALYZER] ✓ VIOLATION LOGGED to DB: P{self.participant_id} - {primary_violation} " + 
+                              f"({int(duration)}s) [Evidence: {self.violation_evidence_count[primary_violation]}/{self.max_evidence_per_violation}]")
+                        return True
+                    else:
+                        print(f"[ANALYZER] Max evidence reached for {primary_violation}")
+                        # Reset timer for next cycle
+                        self.violation_start_time = current_time
+        
+        return False
+# ============ ANALYZER MANAGER ============
+
+class AnalyzerManager:
+    """Manages multiple participant analyzers"""
+    
+    def __init__(self):
+        self.analyzers = {}
+        self.lock = threading.Lock()
+        print("[ANALYZER] Manager initialized")
+    
+    def create_analyzer(self, participant_id, session_id, face_photo_url):
+        """Create analyzer for new participant"""
+        with self.lock:
+            if participant_id not in self.analyzers:
+                analyzer = ParticipantAnalyzer(participant_id, session_id, face_photo_url)
+                self.analyzers[participant_id] = analyzer
+                print(f"[ANALYZER] Created analyzer for participant {participant_id}")
+                return analyzer
+            return self.analyzers[participant_id]
+    
+    def remove_analyzer(self, participant_id):
+        """Remove analyzer when exam ends"""
+        with self.lock:
+            if participant_id in self.analyzers:
+                del self.analyzers[participant_id]
+                print(f"[ANALYZER] Removed analyzer for participant {participant_id}")
+                return True
+            return False
+    
+    def process_frame(self, participant_id, frame):
+        """Process single frame and return analysis result"""
+        if participant_id not in self.analyzers:
+            return {'status': 'error', 'message': 'Analyzer not found'}
+        
+        analyzer = self.analyzers[participant_id]
+        
+        # Analyze frame
+        analysis_result = analyzer.analyze_frame(frame)
+        
+        # Process violations
+        analyzer.process_violations(analysis_result, frame)
+        
+        return analysis_result
+    
+    def get_analyzer(self, participant_id):
+        """Get analyzer instance"""
+        return self.analyzers.get(participant_id)
+
+# Global manager instance
+analyzer_manager = AnalyzerManager()
+
+print("[ANALYZER] FACE ANALYZER - READY")

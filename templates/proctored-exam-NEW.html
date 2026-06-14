@@ -1,0 +1,1074 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Ujian - Proctoring System</title>
+    
+    <!-- Scripts for monitoring and screenshot -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="{{ url_for('static', filename='exam-monitor-ENHANCED.js') }}"></script>
+    <script src="{{ url_for('static', filename='webcam-analyzer.js') }}"></script>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f5f5;
+        }
+
+        /* Monitor Status Bar */
+        .monitor-status-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 40px;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            z-index: 10000;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            font-size: 13px;
+        }
+
+        .monitor-status-bar strong {
+            font-weight: 600;
+        }
+
+        .monitor-left {
+            flex: 1;
+            display: flex;
+            gap: 20px;
+            align-items: center;
+        }
+
+        .monitor-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #00ff00;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .monitor-info {
+            display: flex;
+            gap: 20px;
+        }
+
+        .monitor-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .monitor-right {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .btn-end-exam {
+            padding: 6px 12px;
+            background: #ff4444;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 12px;
+            transition: all 0.3s;
+        }
+
+        .btn-end-exam:hover {
+            background: #cc0000;
+            box-shadow: 0 2px 8px rgba(255,0,0,0.3);
+        }
+
+        /* Webcam Panel */
+        .webcam-panel {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 240px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+            padding: 10px;
+            z-index: 5000;
+            border: 3px solid #667eea;
+        }
+
+        .webcam-header {
+            font-weight: 600;
+            color: #333;
+            font-size: 12px;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .webcam-status {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #00ff00;
+            animation: pulse 1s infinite;
+            margin-right: 5px;
+        }
+
+        #webcam-video {
+            width: 100%;
+            height: 180px;
+            background: #000;
+            border-radius: 5px;
+            object-fit: cover;
+            display: block;
+            margin-bottom: 8px;
+        }
+
+        #webcam-canvas {
+            display: none;
+        }
+
+        #webcam-overlay-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border-radius: 5px;
+        }
+
+        .webcam-video-container {
+            position: relative;
+            width: 100%;
+            height: 180px;
+            background: #000;
+            border-radius: 5px;
+            overflow: hidden;
+            margin-bottom: 8px;
+        }
+
+        .webcam-video-container video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        #webcam-violations {
+            background: #fff3cd;
+            border: 2px solid #ffc107;
+            border-radius: 5px;
+            padding: 6px;
+            font-size: 10px;
+            max-height: 50px;
+            overflow-y: auto;
+            margin-bottom: 8px;
+        }
+
+        /* ✅ ENHANCED: Force display state styles */
+        #webcam-violations.violation-active {
+            background: #fff3cd !important;
+            color: #856404 !important;
+            display: block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+        }
+
+        #webcam-violations.violation-normal-state {
+            background: #d4edda !important;
+            color: #155724 !important;
+            display: block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            border: 2px solid #c3e6cb !important;
+        }
+
+        .violation-badge {
+            display: inline-block;
+            background: #dc3545;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+            margin: 2px;
+            font-weight: 600;
+            font-size: 9px;
+        }
+
+        .violation-badge.violation-normal {
+            background: #28a745 !important;
+            color: white !important;
+        }
+
+        .violation-badge.violation-face_not_forward {
+            background: #ff6b6b;
+        }
+
+        .violation-badge.violation-face_mismatch {
+            background: #ff4757;
+        }
+
+        .violation-badge.violation-multi_face {
+            background: #ee5a6f;
+        }
+
+        .violation-badge.violation-eyes_looking_away {
+            background: #ffa502;
+        }
+
+        .violation-badge.violation-no_face_detected {
+            background: #a4161a;
+        }
+
+        .violation-badge.violation-no_face {
+            background: #a4161a;
+        }
+
+        .webcam-status-info {
+            font-size: 10px;
+            color: #666;
+            padding: 4px;
+            background: #f0f0f0;
+            border-radius: 3px;
+            text-align: center;
+        }
+
+        .webcam-controls {
+            display: none;
+        }
+
+        .webcam-btn {
+            display: none;
+        }
+
+        .webcam-btn-start {
+            display: none;
+        }
+
+        .webcam-btn-start:hover {
+            display: none;
+        }
+
+        .webcam-btn-stop {
+            display: none;
+        }
+
+        .webcam-btn-stop:hover {
+            display: none;
+        }
+
+        /* Exam Content Container */
+        .exam-container {
+            position: absolute;
+            top: 40px;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            width: 100%;
+            height: calc(100% - 40px);
+            overflow: hidden;
+        }
+
+        .exam-iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+            display: block;
+        }
+
+        /* Warning overlay */
+        .warning-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.7);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 20000;
+        }
+
+        .warning-overlay.show {
+            display: flex;
+        }
+
+        .warning-message {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            max-width: 500px;
+            text-align: center;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+        }
+
+        .warning-message h3 {
+            color: #dc3545;
+            margin-bottom: 15px;
+            font-size: 20px;
+        }
+
+        .warning-message p {
+            color: #666;
+            line-height: 1.6;
+            margin-bottom: 20px;
+        }
+
+        .warning-message button {
+            padding: 10px 20px;
+            background: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        .warning-message button:hover {
+            background: #c82333;
+        }
+
+        /* Debug console (hidden by default) */
+        .debug-console {
+            display: none;
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            width: 400px;
+            max-height: 300px;
+            background: #1e1e1e;
+            color: #00ff00;
+            border: 2px solid #00ff00;
+            border-radius: 5px;
+            padding: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            overflow-y: auto;
+            z-index: 15000;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.5);
+        }
+
+        .debug-console.show {
+            display: block;
+        }
+
+        .debug-line {
+            margin: 3px 0;
+            word-wrap: break-word;
+        }
+
+        /* ✅ VIOLATION FREEZE OVERLAY */
+        .violation-freeze-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 19999;
+            backdrop-filter: blur(5px);
+        }
+
+        .violation-freeze-overlay.show {
+            display: flex !important;
+        }
+
+        .violation-freeze-content {
+            background: white;
+            border-radius: 15px;
+            padding: 40px;
+            max-width: 500px;
+            text-align: center;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+            animation: slideDown 0.3s ease-out;
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-50px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .violation-freeze-icon {
+            font-size: 60px;
+            margin-bottom: 20px;
+            animation: pulse 1s infinite;
+        }
+
+        .violation-freeze-title {
+            font-size: 28px;
+            font-weight: bold;
+            color: #dc3545;
+            margin-bottom: 15px;
+        }
+
+        .violation-freeze-message {
+            font-size: 16px;
+            color: #333;
+            line-height: 1.6;
+            margin-bottom: 20px;
+        }
+
+        .violation-freeze-details {
+            font-size: 14px;
+            color: #666;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #dc3545;
+            text-align: left;
+        }
+
+        @media (max-width: 1024px) {
+            .monitor-status-bar {
+                font-size: 12px;
+                padding: 0 10px;
+            }
+
+            .monitor-info {
+                gap: 10px;
+            }
+
+            .monitor-item {
+                gap: 5px;
+            }
+
+            .webcam-panel {
+                width: 200px;
+                bottom: 10px;
+                right: 10px;
+            }
+
+            #webcam-video {
+                height: 150px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Monitor Status Bar -->
+    <div class="monitor-status-bar">
+        <div class="monitor-left">
+            <div>
+                <span class="monitor-indicator"></span>
+                <strong>Monitoring Active</strong>
+            </div>
+            <div class="monitor-info">
+                <div class="monitor-item">
+                    <span>⏱️ Duration:</span>
+                    <span id="duration">00:00:00</span>
+                </div>
+                <div class="monitor-item">
+                    <span>⚠️ Violations:</span>
+                    <span id="violations-count">0</span>
+                </div>
+                <div class="monitor-item">
+                    <span>📤 Queue:</span>
+                    <span id="queue-count">0</span>
+                </div>
+            </div>
+        </div>
+        <div class="monitor-right">
+            <button class="btn-end-exam" onclick="requestExamEnd()">
+                ⏹️ Selesaikan Ujian
+            </button>
+        </div>
+    </div>
+
+    <!-- Exam Content -->
+    <div class="exam-container">
+        <iframe id="exam-iframe" class="exam-iframe" allow="camera; microphone; clipboard-read; clipboard-write"></iframe>
+        
+        <!-- ✅ VIOLATION FREEZE OVERLAY -->
+        <div class="violation-freeze-overlay" id="violation-freeze-overlay" style="display: none;">
+            <div class="violation-freeze-content">
+                <div class="violation-freeze-icon">⚠️</div>
+                <div class="violation-freeze-title" id="violation-freeze-title">VIOLATION DETECTED</div>
+                <div class="violation-freeze-message" id="violation-freeze-message">
+                    Your exam has been paused due to a violation. Please fix the issue and try again.
+                </div>
+                <div class="violation-freeze-details" id="violation-freeze-details"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Webcam Analysis Panel (AUTO-START, NO BUTTONS) -->
+    <div class="webcam-panel">
+        <div class="webcam-header">
+            <span><span class="webcam-status"></span>📹 Face Analysis</span>
+        </div>
+        <div class="webcam-video-container">
+            <video id="webcam-video" playsinline autoplay muted></video>
+            <canvas id="webcam-overlay-canvas"></canvas>
+        </div>
+        <canvas id="webcam-canvas"></canvas>
+        <div id="webcam-violations"></div>
+        <div class="webcam-status-info">🔴 Analyzing...</div>
+    </div>
+
+    <!-- Warning Overlay -->
+    <div class="warning-overlay" id="warning-overlay">
+        <div class="warning-message">
+            <h3>⚠️ Peringatan</h3>
+            <p id="warning-text">Pesan peringatan akan ditampilkan di sini</p>
+            <button onclick="closeWarning()">Kembali ke Ujian</button>
+        </div>
+    </div>
+
+    <!-- Debug Console (for development, toggle with Ctrl+Alt+D) -->
+    <div class="debug-console" id="debug-console"></div>
+
+    <script>
+        /**
+         * PROCTORED EXAM WRAPPER
+         * Loads exam content and initializes monitoring
+         */
+
+        console.log('\n' + '='.repeat(80));
+        console.log('PROCTORED EXAM WRAPPER - LOADING');
+        console.log('='.repeat(80));
+
+        // Get query parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const examUrl = urlParams.get('exam_url');
+        const participantId = parseInt(urlParams.get('participant_id'));
+        const sessionId = parseInt(urlParams.get('session_id'));
+
+        console.log('[WRAPPER] Exam URL:', examUrl);
+        console.log('[WRAPPER] Participant ID:', participantId);
+        console.log('[WRAPPER] Session ID:', sessionId);
+
+        let startTime = new Date();
+        let monitorInstance = null;
+
+        /**
+         * Initialize exam wrapper
+         */
+        function initExamWrapper() {
+            console.log('\n[WRAPPER-INIT] Initializing exam wrapper...');
+
+            if (!examUrl || !participantId || !sessionId) {
+                showWarning(
+                    'Parameter Tidak Lengkap',
+                    'Exam URL, Participant ID, atau Session ID tidak ditemukan. Hubungi admin.'
+                );
+                console.error('[WRAPPER-INIT] ❌ Missing parameters');
+                return;
+            }
+
+            // Load exam in iframe
+            console.log('[WRAPPER-INIT] Loading exam URL in iframe...');
+            const iframe = document.getElementById('exam-iframe');
+            iframe.src = examUrl;
+
+            // Monitor iframe load
+            iframe.addEventListener('load', () => {
+                console.log('[WRAPPER-INIT] ✅ Iframe loaded');
+            });
+
+            iframe.addEventListener('error', () => {
+                console.error('[WRAPPER-INIT] ❌ Iframe load error');
+                showWarning('Error', 'Gagal memuat halaman ujian. Hubungi admin.');
+            });
+
+            // Prevent common cheating methods
+            preventCheating();
+
+            // Initialize exam monitor
+            console.log('[WRAPPER-INIT] Initializing exam monitor...');
+            if (typeof initializeExamMonitor === 'function') {
+                initializeExamMonitor({
+                    participantId: participantId,
+                    sessionId: sessionId,
+                    uploadEndpoint: '/api/record-violation'
+                });
+                console.log('[WRAPPER-INIT] ✅ Exam monitor initialized');
+            } else {
+                console.error('[WRAPPER-INIT] ❌ initializeExamMonitor function not found');
+            }
+
+            // Initialize webcam analyzer
+            console.log('[WRAPPER-INIT] Initializing webcam analyzer...');
+            if (typeof initializeWebcamAnalyzer === 'function') {
+                initializeWebcamAnalyzer({
+                    participantId: participantId,
+                    sessionId: sessionId,
+                    frameRate: 10
+                });
+                console.log('[WRAPPER-INIT] ✅ Webcam analyzer initialized');
+            } else {
+                console.error('[WRAPPER-INIT] ❌ initializeWebcamAnalyzer function not found');
+            }
+
+            // Update status every second
+            setInterval(updateStatus, 1000);
+
+            console.log('[WRAPPER-INIT] ✅ Exam wrapper initialized');
+        }
+
+        /**
+         * Prevent cheating methods
+         */
+        function preventCheating() {
+            console.log('[PREVENT] Implementing anti-cheating measures...');
+
+            // Disable right-click
+            document.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+                showWarning('Tindakan Terlarang', 'Right-click tidak diizinkan selama ujian.');
+                console.log('[PREVENT] Right-click prevented');
+                return false;
+            });
+
+            // Disable F12 (Developer tools)
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'F12') {
+                    e.preventDefault();
+                    showWarning('Tindakan Terlarang', 'Developer tools tidak diizinkan.');
+                    console.log('[PREVENT] F12 prevented');
+                    return false;
+                }
+            });
+
+            // Disable window.open
+            const originalOpen = window.open;
+            window.open = function(...args) {
+                console.log('[PREVENT] window.open blocked');
+                showWarning('Tindakan Terlarang', 'Membuka window baru tidak diizinkan.');
+                return null;
+            };
+
+            // Prevent page navigation
+            window.addEventListener('beforeunload', (e) => {
+                if (window.examMonitor && window.examMonitor.isActive) {
+                    // Let monitor handle it
+                    return;
+                }
+                e.preventDefault();
+                e.returnValue = '';
+            });
+
+            console.log('[PREVENT] ✅ Anti-cheating measures implemented');
+        }
+
+        /**
+         * Update status display
+         */
+        function updateStatus() {
+            // Update duration
+            const duration = Math.floor((new Date() - startTime) / 1000);
+            const hours = Math.floor(duration / 3600);
+            const minutes = Math.floor((duration % 3600) / 60);
+            const seconds = duration % 60;
+
+            document.getElementById('duration').textContent = 
+                `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+
+            // Update violation count
+            if (window.examMonitor) {
+                document.getElementById('violations-count').textContent = 
+                    window.examMonitor.violations.length;
+                document.getElementById('queue-count').textContent = 
+                    window.examMonitor.uploadQueue.length;
+            }
+        }
+
+        /**
+         * Show warning message
+         */
+        function showWarning(title, message) {
+            const overlay = document.getElementById('warning-overlay');
+            overlay.querySelector('h3').textContent = '⚠️ ' + title;
+            overlay.querySelector('p').textContent = message;
+            overlay.classList.add('show');
+            
+            console.log(`[WARNING] ${title}: ${message}`);
+        }
+
+        /**
+         * Close warning
+         */
+        function closeWarning() {
+            document.getElementById('warning-overlay').classList.remove('show');
+        }
+
+        /**
+         * Request exam end from parent window
+         */
+        function requestExamEnd() {
+            console.log('\n[END-REQUEST] User requested exam end');
+
+            if (window.opener && window.opener.endExamWindow) {
+                console.log('[END-REQUEST] Notifying parent window...');
+                window.opener.endExamWindow();
+            } else {
+                console.log('[END-REQUEST] ⚠️ Parent window not available');
+                console.log('[END-REQUEST] Attempting to close exam window...');
+                window.close();
+            }
+        }
+
+        /**
+         * Debug console for development
+         */
+        let debugLines = [];
+        function addDebugLog(message) {
+            debugLines.push(`[${new Date().toLocaleTimeString()}] ${message}`);
+            if (debugLines.length > 50) {
+                debugLines.shift();
+            }
+
+            const console_elem = document.getElementById('debug-console');
+            console_elem.innerHTML = debugLines
+                .map(line => `<div class="debug-line">${line}</div>`)
+                .join('');
+            console_elem.scrollTop = console_elem.scrollHeight;
+        }
+
+        // Toggle debug console with Ctrl+Alt+D
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.altKey && e.key.toLowerCase() === 'd') {
+                const console_elem = document.getElementById('debug-console');
+                console_elem.classList.toggle('show');
+                console.log('[DEBUG] Debug console toggled');
+            }
+        });
+
+        /**
+         * Intercept console logs for debug display
+         */
+        const originalLog = console.log;
+        console.log = function(...args) {
+            originalLog.apply(console, args);
+            const message = args.map(arg => 
+                typeof arg === 'string' ? arg : JSON.stringify(arg)
+            ).join(' ');
+            addDebugLog(message);
+        };
+
+        /**
+         * Initialize on page load
+         */
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('\n[PAGE-LOAD] Proctored exam page loaded');
+            initExamWrapper();
+            
+            // ✅ SETUP VIOLATION NOTIFICATION LISTENER
+            window.addEventListener('message', handleViolationNotification);
+            console.log('[PAGE-LOAD] ✅ Violation notification listener active');
+            
+            console.log('[PAGE-LOAD] ✅ All initialization complete');
+        });
+
+        /**
+         * ✅ NEW STRATEGY: CONTINUOUS PULSE FREEZE WITH CONFIGURABLE INTERVALS
+         * ✅ While violation exists → FREEZE → UNFREEZE → WAIT (interval) → Check if still violation
+         * ✅ If violation still exists → FREEZE again (creates repeating pulse with interval)
+         * ✅ If violation ends → Stop pulse loop
+         * ✅ Creates aggressive, continuous notification with configurable timing
+         */
+        
+        // ✅ CONFIG FROM .ENV (passed via template)
+        const NOTIFICATION_FREEZE_DURATION = {{ notification_freeze_duration | default(2000) }};  // How long to freeze (ms)
+        const NOTIFICATION_INTERVAL = {{ notification_interval | default(3000) }};  // Jeda/interval between pulses (ms)
+        
+        console.log('[CONFIG] NOTIFICATION_FREEZE_DURATION:', NOTIFICATION_FREEZE_DURATION, 'ms');
+        console.log('[CONFIG] NOTIFICATION_INTERVAL:', NOTIFICATION_INTERVAL, 'ms');
+        console.log('[CONFIG] Total pulse cycle:', (NOTIFICATION_FREEZE_DURATION + NOTIFICATION_INTERVAL), 'ms');
+        
+        let autoUnfreezeTimer = null;
+        let pulseWaitTimer = null;  // ✅ NEW: Timer untuk wait/interval
+        let currentViolation = null;  // ✅ Track current violation status
+        
+        function freezeExam(violationData) {
+            console.log('\n' + '🔴'.repeat(40));
+            console.log('🚨🚨🚨 FREEZE EXAM (2-sec pulse) 🚨🚨🚨');
+            console.log('🔴'.repeat(40));
+            
+            const freezeOverlay = document.getElementById('violation-freeze-overlay');
+            const freezeTitle = document.getElementById('violation-freeze-title');
+            const freezeMessage = document.getElementById('violation-freeze-message');
+            const freezeDetails = document.getElementById('violation-freeze-details');
+            const examIframe = document.getElementById('exam-iframe');
+            
+            // Update overlay content
+            if (freezeTitle) freezeTitle.textContent = '🚨 EXAM PAUSED';
+            if (freezeMessage) freezeMessage.textContent = `⚠️ ${violationData.violation.toUpperCase()} DETECTED`;
+            if (freezeDetails) {
+                freezeDetails.innerHTML = `
+                    <div style="text-align: left; font-size: 12px;">
+                        <strong>Type:</strong> ${violationData.violation.toUpperCase()}<br>
+                        <strong>Time:</strong> ${new Date().toLocaleTimeString()}<br>
+                        <strong>Status:</strong> <span style="color: #ff6b6b;">🔴 EXAM FROZEN (2 seconds)</span>
+                    </div>
+                `;
+            }
+            
+            // ✅ FORCE FREEZE
+            freezeOverlay.classList.add('show');
+            freezeOverlay.style.cssText = `
+                display: flex !important;
+                visibility: visible !important;
+                opacity: 1 !important;
+                z-index: 99999 !important;
+                pointer-events: auto !important;
+                position: fixed !important;
+                top: 0 !important;
+                left: 0 !important;
+                width: 100% !important;
+                height: 100% !important;
+            `;
+            
+            // Disable iframe
+            if (examIframe) {
+                examIframe.style.pointerEvents = 'none';
+                examIframe.style.opacity = '0.4';
+                examIframe.style.filter = 'blur(3px)';
+            }
+            
+            console.log('[FREEZE] ✅ Overlay visible, iframe disabled');
+        }
+        
+        function unfreezeExam() {
+            console.log('\n' + '🟢'.repeat(40));
+            console.log('✅✅✅ AUTO-UNFREEZE (2 seconds elapsed) ✅✅✅');
+            console.log('🟢'.repeat(40));
+            
+            const freezeOverlay = document.getElementById('violation-freeze-overlay');
+            const examIframe = document.getElementById('exam-iframe');
+            
+            // UNFREEZE OVERLAY
+            freezeOverlay.classList.remove('show');
+            freezeOverlay.style.cssText = `
+                display: none !important;
+                visibility: hidden !important;
+                opacity: 0 !important;
+                pointer-events: none !important;
+            `;
+            
+            // RE-ENABLE IFRAME
+            if (examIframe) {
+                examIframe.style.pointerEvents = 'auto';
+                examIframe.style.opacity = '1';
+                examIframe.style.filter = 'none';
+            }
+            
+            console.log('[UNFREEZE] ✅ Overlay hidden, iframe re-enabled');
+            console.log('[UNFREEZE] ⏳ Checking if violation still exists...');
+        }
+        
+        function scheduleAutoUnfreeze() {
+            // Clear any existing timer
+            if (autoUnfreezeTimer) {
+                clearTimeout(autoUnfreezeTimer);
+            }
+            
+            // ✅ SET FREEZE TIMER (from config)
+            autoUnfreezeTimer = setTimeout(() => {
+                console.log('[SCHEDULER] ⏱️ Freeze duration expired (' + NOTIFICATION_FREEZE_DURATION + 'ms)');
+                
+                // UNFREEZE NOW
+                unfreezeExam();
+                
+                // ✅ SCHEDULE WAIT BEFORE CHECKING VIOLATION AGAIN
+                if (pulseWaitTimer) {
+                    clearTimeout(pulseWaitTimer);
+                }
+                
+                pulseWaitTimer = setTimeout(() => {
+                    console.log('[SCHEDULER] ⏳ Interval wait complete (' + NOTIFICATION_INTERVAL + 'ms) - Checking violation...');
+                    
+                    // ✅ KEY: Check if violation STILL EXISTS
+                    if (currentViolation) {
+                        console.log('[SCHEDULER] 🔄 Violation STILL ACTIVE (' + currentViolation.violation + ')');
+                        console.log('[SCHEDULER] 🔄 Restarting pulse cycle...\n');
+                        
+                        // FREEZE AGAIN (restart pulse)
+                        freezeExam(currentViolation);
+                        scheduleAutoUnfreeze();
+                    } else {
+                        console.log('[SCHEDULER] ✅ No more violations - pulse stopped');
+                        autoUnfreezeTimer = null;
+                        pulseWaitTimer = null;
+                    }
+                }, NOTIFICATION_INTERVAL);  // ✅ INTERVAL FROM CONFIG
+                
+                console.log('[SCHEDULER] ⏳ Waiting ' + NOTIFICATION_INTERVAL + 'ms before next pulse...');
+                
+            }, NOTIFICATION_FREEZE_DURATION);  // ✅ FREEZE DURATION FROM CONFIG
+            
+            console.log('[SCHEDULER] ⏱️ Timer set - Freeze for ' + NOTIFICATION_FREEZE_DURATION + 'ms');
+        }
+        
+        function handleViolationNotification(event) {
+            // ✅ METHOD 1: postMessage event
+            let violationData = null;
+            
+            // Parse from postMessage
+            if (event && event.data) {
+                if (event.data.source === 'webcam-analyzer' && event.data.type === 'violation_notification' && event.data.data) {
+                    violationData = event.data.data;
+                    console.log('[VIOLATION-HANDLER] ✅ Received via postMessage:', violationData.type);
+                }
+                // Fallback: event.data might directly be the violation data
+                else if (event.data.violation && (event.data.type === 'violation_start' || event.data.type === 'violation_end')) {
+                    violationData = event.data;
+                    console.log('[VIOLATION-HANDLER] ✅ Received via fallback parse:', violationData.type);
+                }
+            }
+            // METHOD 2: Direct object call (used by direct calls)
+            else if (event && typeof event === 'object' && event.violation && event.type) {
+                violationData = event;
+                console.log('[VIOLATION-HANDLER] ✅ Received via direct call:', violationData.type);
+            }
+            
+            if (!violationData || !violationData.type) {
+                // Not a violation notification
+                return;
+            }
+            
+            console.log('\n' + '═'.repeat(80));
+            console.log('[VIOLATION-HANDLER] 🔴🔴🔴 PROCESSING VIOLATION 🔴🔴🔴');
+            console.log('═'.repeat(80));
+            console.log('[VIOLATION-HANDLER] Type:', violationData.type);
+            console.log('[VIOLATION-HANDLER] Violation:', violationData.violation);
+            console.log('[VIOLATION-HANDLER] Message:', violationData.message);
+            console.log('═'.repeat(80));
+            
+            // ✅ HANDLE VIOLATION_START - Start pulse loop
+            if (violationData.type === 'violation_start') {
+                console.log('[VIOLATION-HANDLER] 🚨 VIOLATION START - Initiating pulse loop');
+                
+                currentViolation = violationData;  // ✅ Store violation
+                freezeExam(violationData);
+                scheduleAutoUnfreeze();
+            }
+            // ✅ HANDLE VIOLATION_CHANGE - Restart pulse with new violation type
+            else if (violationData.type === 'violation_change') {
+                console.log('[VIOLATION-HANDLER] 🟡 VIOLATION CHANGED - Updating and continuing pulse');
+                
+                currentViolation = violationData;  // ✅ Update violation
+                
+                // Only restart if not already in pulse cycle
+                if (!autoUnfreezeTimer) {
+                    console.log('[VIOLATION-HANDLER] Not in pulse - starting now');
+                    freezeExam(violationData);
+                    scheduleAutoUnfreeze();
+                } else {
+                    console.log('[VIOLATION-HANDLER] Already pulsing - continuing with new violation type');
+                }
+            }
+            // ✅ HANDLE VIOLATION_END - Stop pulse loop
+            else if (violationData.type === 'violation_end') {
+                console.log('\n' + '🟢'.repeat(40));
+                console.log('✅✅✅ VIOLATION CLEARED - STOPPING PULSE 🟢✅');
+                console.log('🟢'.repeat(40));
+                console.log('[VIOLATION-HANDLER] No more violations detected');
+                
+                // ✅ CLEAR LOOP STATE
+                currentViolation = null;  // ✅ Clear violation
+                
+                // ✅ Clear both timers
+                if (autoUnfreezeTimer) {
+                    clearTimeout(autoUnfreezeTimer);
+                    console.log('[VIOLATION-HANDLER] ⏱️ Freeze timer cleared (violation ended)');
+                }
+                
+                if (pulseWaitTimer) {
+                    clearTimeout(pulseWaitTimer);
+                    console.log('[VIOLATION-HANDLER] ⏳ Wait timer cleared (violation ended)');
+                }
+                
+                // UNFREEZE IMMEDIATELY
+                unfreezeExam();
+                autoUnfreezeTimer = null;
+                pulseWaitTimer = null;
+                
+                console.log('[VIOLATION-HANDLER] ✅ EXAM UNFROZEN - PULSE STOPPED');
+                console.log('═'.repeat(80) + '\n');
+            }
+        }
+        
+        // ✅ AGGRESSIVE POLLING - Check for violations every 25ms (40x per second)
+        let lastProcessedViolationId = null;
+        setInterval(() => {
+            try {
+                // Check from polling storage
+                if (window.lastViolationNotification) {
+                    const notif = window.lastViolationNotification;
+                    const notifId = notif.timestamp + '_' + notif.data.type;
+                    
+                    // Only process if NEW notification
+                    if (lastProcessedViolationId !== notifId) {
+                        lastProcessedViolationId = notifId;
+                        console.log('[POLLING] 🔍 New violation detected from storage');
+                        handleViolationNotification(notif);
+                    }
+                }
+            } catch (error) {
+                // Silent error - don't spam logs
+            }
+        }, 25);  // ✅ 25ms = 40x per second for super aggressive polling
+
+        /**
+         * Cleanup on unload
+         */
+        window.addEventListener('beforeunload', async (event) => {
+            console.log('\n[UNLOAD] Exam window is closing...');
+            
+            // Stop analysis if running
+            if (window.webcamAnalyzer?.isRunning) {
+                console.log('[UNLOAD] Stopping webcam analysis...');
+                try {
+                    await window.webcamAnalyzer.stop();
+                } catch (error) {
+                    console.error('[UNLOAD] Error stopping analysis:', error);
+                }
+            }
+            
+            // Warn if exam not ended properly
+            if (!window.examEnded) {
+                event.returnValue = 'Are you sure you want to leave? Your exam will end.';
+                return event.returnValue;
+            }
+        });
+
+        console.log('='.repeat(80));
+        console.log('PROCTORED EXAM WRAPPER - LOADED');
+        console.log('='.repeat(80) + '\n');
+    </script>
+</body>
+</html>

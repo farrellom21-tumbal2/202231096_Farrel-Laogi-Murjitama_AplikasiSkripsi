@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edit Sesi Ujian - Proctoring App</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="dashboard-container">
+        <!-- Navbar -->
+        <nav class="navbar">
+            <div class="navbar-content">
+                <h2 class="navbar-title">Proctoring App</h2>
+                <div class="navbar-user">
+                    <span class="user-greeting">Selamat datang, Admin!</span>
+                    <a href="{{ url_for('logout') }}" class="logout-btn">Logout</a>
+                </div>
+            </div>
+        </nav>
+        
+        <!-- Main Content -->
+        <div class="dashboard-content">
+            <div class="dashboard-header">
+                <div class="header-top">
+                    <div>
+                        <h1>Edit Sesi Ujian</h1>
+                        <p class="dashboard-subtitle">Perbarui informasi sesi ujian</p>
+                    </div>
+                    <a href="{{ url_for('admin_sessions') }}" class="back-btn">← Kembali ke Daftar Sesi</a>
+                </div>
+            </div>
+            
+            <!-- Error Message -->
+            {% if error %}
+                <div class="error-message">
+                    ❌ {{ error }}
+                </div>
+            {% endif %}
+            
+            <!-- Form Edit Session -->
+            <div class="form-card">
+                <h2>Perbarui Sesi Ujian</h2>
+                {% if session %}
+                    <form method="POST" class="session-form">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="session_name">Nama Sesi</label>
+                                <input 
+                                    type="text" 
+                                    id="session_name" 
+                                    name="session_name" 
+                                    placeholder="Contoh: Ujian Matematika - Kelas 10A" 
+                                    value="{{ session.session_name }}"
+                                    required
+                                >
+                            </div>
+                            <div class="form-group">
+                                <label for="exam_end_code">Kode Akhir Ujian</label>
+                                <input 
+                                    type="text" 
+                                    id="exam_end_code" 
+                                    name="exam_end_code" 
+                                    placeholder="Contoh: SELESAI123"
+                                    value="{{ session.exam_end_code if session.exam_end_code else '' }}"
+                                    required
+                                >
+                            </div>
+                        </div>
+                        
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="start_time">Waktu Mulai</label>
+                                <input 
+                                    type="datetime-local" 
+                                    id="start_time" 
+                                    name="start_time"
+                                    value="{{ session.start_time.strftime('%Y-%m-%dT%H:%M') if session.start_time else '' }}"
+                                    required
+                                >
+                            </div>
+                            <div class="form-group">
+                                <label for="end_time">Waktu Selesai</label>
+                                <input 
+                                    type="datetime-local" 
+                                    id="end_time" 
+                                    name="end_time"
+                                    value="{{ session.end_time.strftime('%Y-%m-%dT%H:%M') if session.end_time else '' }}"
+                                    required
+                                >
+                            </div>
+                        </div>
+                        
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="exam_url">URL Ujian</label>
+                                <input 
+                                    type="url" 
+                                    id="exam_url" 
+                                    name="exam_url" 
+                                    placeholder="https://example.com/exam"
+                                    value="{{ session.exam_url }}"
+                                    required
+                                >
+                            </div>
+                        </div>
+                        
+                        <div class="form-actions">
+                            <button type="submit" class="submit-btn">Simpan Perubahan</button>
+                            <a href="{{ url_for('admin_sessions') }}" class="cancel-btn">Batal</a>
+                        </div>
+                    </form>
+                {% else %}
+                    <div class="empty-state">
+                        <p>Sesi tidak ditemukan. <a href="{{ url_for('admin_sessions') }}">Kembali ke daftar sesi</a></p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</body>
+</html>

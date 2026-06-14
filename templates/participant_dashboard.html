@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Peserta - Proctoring App</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="{{ url_for('static', filename='exam-monitor.js') }}"></script>
+    <style>
+        .logout-btn:disabled {
+            background: #ccc !important;
+            cursor: not-allowed !important;
+            opacity: 0.6 !important;
+        }
+
+        .logout-warning-text {
+            font-size: 11px;
+            color: #dc3545;
+            font-weight: 600;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+
+        .logout-warning-text.hidden {
+            display: none;
+        }
+
+        .exam-end-section {
+            display: none !important;
+        }
+
+        .exam-end-section.show {
+            display: block !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="participant-dashboard-container">
+        <!-- Navbar -->
+        <nav class="participant-navbar">
+            <div class="navbar-content">
+                <h2 class="navbar-title">Proctoring System</h2>
+                <div class="navbar-user">
+                    <span class="user-greeting">{{ session.get('participant_name') }}</span>
+                    <button 
+                        id="logout-btn"
+                        class="logout-btn" 
+                        onclick="handleLogoutClick()"
+                        disabled
+                        title="Selesaikan ujian dengan memasukkan kode akhir ujian terlebih dahulu"
+                    >
+                        Logout
+                    </button>
+                    <span id="logout-warning" class="logout-warning-text">
+                        🔒 Selesaikan ujian dulu
+                    </span>
+                </div>
+            </div>
+        </nav>
+        
+        <!-- Main Content -->
+        <div class="dashboard-content">
+            <div class="dashboard-header">
+                <h1>Dashboard Peserta</h1>
+                <p class="dashboard-subtitle">Informasi ujian dan status Anda</p>
+            </div>
+            
+            {% if participant %}
+                <!-- Identitas Peserta -->
+                <div class="card identity-card">
+                    <h2>📋 Identitas Peserta</h2>
+                    <div class="identity-grid">
+                        <div class="identity-item">
+                            <label>Nomor Peserta</label>
+                            <p class="identity-value">{{ participant.participant_number }}</p>
+                        </div>
+                        <div class="identity-item">
+                            <label>Nama Lengkap</label>
+                            <p class="identity-value">{{ participant.participant_name }}</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Foto Peserta -->
+                    {% if participant.face_photo_url %}
+                        <div class="photo-section">
+                            <label>Foto Identitas</label>
+                            <div class="photo-container">
+                                <img src="{{ participant.face_photo_url }}" alt="Foto {{ participant.participant_name }}" class="identity-photo">
+                            </div>
+                        </div>
+                    {% endif %}
+                </div>
+                
+                <!-- Session Info -->
+                {% if participant.session_name %}
+                    <div class="card exam-card">
+                        <h2>📚 Informasi Ujian</h2>
+                        
+                        <!-- Session Name -->
+                        <div class="exam-section">
+                            <label>Nama Sesi Ujian</label>
+                            <p class="exam-value">{{ participant.session_name }}</p>
+                        </div>
+                        
+                        <!-- Schedule -->
+                        <div class="schedule-grid">
+                            <div class="schedule-item">
+                                <label>⏰ Waktu Mulai</label>
+                                <p class="exam-value">
+                                    {% if participant.start_time %}
+                                        {{ participant.start_time.strftime('%d %B %Y, %H:%M') }}
+                                    {% else %}
+                                        Belum ditentukan
+                                    {% endif %}
+                                </p>
+                            </div>
+                            <div class="schedule-item">
+                                <label>⏹️ Waktu Selesai</label>
+                                <p class="exam-value">
+                                    {% if participant.end_time %}
+                                        {{ participant.end_time.strftime('%d %B %Y, %H:%M') }}
+                                    {% else %}
+                                        Belum ditentukan
+                                    {% endif %}
+                                </p>
+                            </div>
+                        </div>
+                        
+                        <!-- Duration -->
+                        {% if participant.start_time and participant.end_time %}
+                            <div class="exam-section">
+                                <label>⏱️ Durasi Ujian</label>
+                                <p class="exam-value">
+                                    {% set duration = (participant.end_time - participant.start_time).total_seconds() / 3600 %}
+                                    {{ "%.1f"|format(duration) }} jam
+                                </p>
+                            </div>
+                        {% endif %}
+                        
+                        <!-- Exam Status -->
+                        <div class="exam-section status-section">
+                            <label>Status Ujian</label>
+                            <div class="status-badge {% if exam_status == 'Sedang Berlangsung' %}active{% elif exam_status == 'Selesai' %}completed{% else %}pending{% endif %}">
+                                {{ exam_status or 'Tidak Ada Session' }}
+                            </div>
+                        </div>
+                        
+                        <!-- Monitoring Status -->
+                        <div class="exam-section monitoring-section">
+                            <label>Status Monitoring</label>
+                            <div id="monitoring-status" class="monitoring-status">
+                                <span class="status-indicator monitoring-active"></span>
+                                <span id="monitoring-text">Monitoring Aktif - Aktivitas Anda dicatat</span>
+                            </div>
+                        </div>
+                        
+                        <!-- Exam URL -->
+                        {% if participant.exam_url and exam_status == 'Sedang Berlangsung' %}
+                            <div class="exam-action">
+                                <a href="{{ participant.exam_url }}" target="_blank" class="start-exam-btn" onclick="startExamMonitoring('{{ participant.exam_url }}', {{ participant.id }}, {{ participant.session_id }})">
+                                    🚀 Mulai Ujian (akan membuka tab baru)
+                                </a>
+                                <p class="exam-warning">⚠️ Jangan tutup atau pindah dari halaman ujian. Aktivitas Anda sedang dipantau!</p>
+                                
+                                <!-- Exam End Code Input Section -->
+                                <div class="exam-end-section" id="exam-end-section" style="margin-top: 20px; display: none;">
+                                    <div style="background: #e7f3ff; padding: 15px; border-radius: 8px; border-left: 4px solid #007bff;">
+                                        <p style="margin: 0 0 15px 0; font-weight: 600; color: #004085;">
+                                            ✅ Ujian Selesai?
+                                        </p>
+                                        <p style="margin: 0 0 15px 0; color: #004085; font-size: 14px;">
+                                            Masukkan kode akhir ujian yang diberikan admin untuk menyelesaikan sesi monitoring.
+                                        </p>
+                                        <div style="display: flex; gap: 10px;">
+                                            <input 
+                                                type="text" 
+                                                id="exam-end-code-input" 
+                                                placeholder="Masukkan kode akhir ujian"
+                                                style="flex: 1; padding: 10px; border: 1px solid #dee2e6; border-radius: 5px; font-size: 14px;"
+                                                autocomplete="off"
+                                            >
+                                            <button 
+                                                type="button"
+                                                id="submit-exam-end-code-btn"
+                                                onclick="event.preventDefault(); submitExamEndCode(); return false;"
+                                                style="padding: 10px 20px; background: #28a745; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: 600;"
+                                            >
+                                                Selesaikan Ujian
+                                            </button>
+                                        </div>
+                                        <div id="exam-end-message" style="margin-top: 10px; font-size: 13px; color: #666;"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        {% elif participant.exam_url and exam_status == 'Belum Dimulai' %}
+                            <div class="exam-info-box pending-info">
+                                <p>⏳ Ujian belum dimulai. Silakan tunggu hingga waktu ujian tiba.</p>
+                            </div>
+                        {% elif participant.exam_url and exam_status == 'Selesai' %}
+                            <div class="exam-info-box completed-info">
+                                <p>✅ Ujian telah selesai. Terima kasih telah mengikuti ujian.</p>
+                            </div>
+                        {% endif %}
+                    </div>
+                {% else %}
+                    <div class="card empty-session-card">
+                        <p>⚠️ Anda belum ditugaskan ke sesi ujian apapun. Hubungi admin untuk informasi lebih lanjut.</p>
+                    </div>
+                {% endif %}
+                
+                <!-- Information Card -->
+                <div class="card info-card">
+                    <h2>ℹ️ Petunjuk Penting & Monitoring</h2>
+                    <ul class="instructions-list">
+                        <li>Sistem monitoring akan mendeteksi jika Anda meninggalkan halaman ujian</li>
+                        <li>Dilarang membuka tab/window baru atau beralih ke aplikasi lain saat ujian berlangsung</li>
+                        <li>Setiap pelanggaran akan dicatat dengan bukti screenshot</li>
+                        <li>Pastikan koneksi internet stabil sebelum ujian dimulai</li>
+                        <li>Jangan tutup browser atau refresh halaman saat ujian berlangsung</li>
+                        <li>Hasil ujian akan dianalisis berdasarkan pelanggaran yang terdeteksi</li>
+                        <li>Hubungi admin jika ada kendala teknis</li>
+                    </ul>
+                </div>
+            {% else %}
+                <div class="card empty-state">
+                    <p>Data peserta tidak ditemukan. <a href="{{ url_for('participant_logout') }}">Silakan login kembali</a></p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script>
+        // Global monitor instance
+        let examMonitor = null;
+        let isExamStarted = false;
+
+        /**
+         * Submit exam end code to finalize exam
+         */
+        async function submitExamEndCode() {
+            const examEndCodeInput = document.getElementById('exam-end-code-input');
+            const examEndMessage = document.getElementById('exam-end-message');
+            const examEndCode = examEndCodeInput.value.trim();
+
+            if (!examEndCode) {
+                examEndMessage.innerHTML = '<span style="color: #dc3545;">❌ Kode tidak boleh kosong!</span>';
+                return;
+            }
+
+            examEndMessage.innerHTML = '<span style="color: #666;">⏳ Memproses kode...</span>';
+
+            try {
+                const response = await fetch('/api/end-exam', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        participant_id: {{ participant.id if participant else 'null' }},
+                        session_id: {{ participant.session_id if participant else 'null' }},
+                        exam_end_code: examEndCode
+                    })
+                });
+
+                const data = await response.json();
+                console.log('Exam end response:', data);
+
+                if (response.ok && data.status === 'success') {
+                    // Code is correct - exam ended successfully
+                    examEndMessage.innerHTML = '<span style="color: #28a745;">✅ Kode benar! Ujian telah selesai.</span>';
+                    
+                    // Stop monitoring in exam window (if it's still open)
+                    // The exam opens in a new tab via window.open
+                    
+                    // Hide the exam end section
+                    const examEndSection = document.getElementById('exam-end-section');
+                    examEndSection.classList.remove('show');
+
+                    // Enable logout button IMMEDIATELY
+                    const logoutBtn = document.getElementById('logout-btn');
+                    const logoutWarning = document.getElementById('logout-warning');
+                    logoutBtn.disabled = false;
+                    logoutBtn.title = '';
+                    logoutWarning.classList.add('hidden');
+                    console.log('[LOGOUT] Button enabled after exam end code accepted');
+
+                    // Show final results
+                    setTimeout(() => {
+                        alert(`✅ Ujian Selesai\n\n` +
+                              `Total Pelanggaran: ${data.total_violations || 0}\n` +
+                              `Total Durasi: ${data.total_violation_time || 0} detik\n` +
+                              `Keputusan: ${data.final_decision || 'Diproses'}\n\n` +
+                              `Anda sekarang dapat logout.`);
+                    }, 500);
+
+                    // Clear input
+                    examEndCodeInput.value = '';
+                } else {
+                    // Wrong code
+                    examEndMessage.innerHTML = '<span style="color: #dc3545;">❌ Kode akhir ujian salah! Silakan coba lagi.</span>';
+                    examEndCodeInput.value = '';
+                    examEndCodeInput.focus();
+                }
+            } catch (error) {
+                console.error('Error submitting exam end code:', error);
+                examEndMessage.innerHTML = '<span style="color: #dc3545;">❌ Error: ' + error.message + '</span>';
+            }
+        }
+
+        /**
+         * Enable logout button
+         */
+        function enableLogoutButton() {
+            const logoutBtn = document.getElementById('logout-btn');
+            const logoutWarning = document.getElementById('logout-warning');
+            
+            logoutBtn.disabled = false;
+            logoutBtn.title = '';
+            logoutWarning.classList.add('hidden');
+        }
+
+        /**
+         * Disable logout button (default state)
+         */
+        function disableLogoutButton() {
+            const logoutBtn = document.getElementById('logout-btn');
+            const logoutWarning = document.getElementById('logout-warning');
+            
+            logoutBtn.disabled = true;
+            logoutBtn.title = 'Selesaikan ujian dengan memasukkan kode akhir ujian terlebih dahulu';
+            logoutWarning.classList.remove('hidden');
+        }
+
+        /**
+         * Show exam end code section
+         */
+        function showExamEndCodeSection() {
+            const examEndSection = document.getElementById('exam-end-section');
+            examEndSection.classList.add('show');
+            document.getElementById('exam-end-code-input').focus();
+        }
+
+        /**
+         * Initialize exam monitoring
+         */
+        async function startExamMonitoring(examUrl, participantId, sessionId) {
+            try {
+                // Log exam start activity
+                await fetch('/api/exam-start', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        participant_id: participantId,
+                        session_id: sessionId
+                    })
+                });
+
+                isExamStarted = true;
+                console.log('Exam monitoring started for participant:', participantId);
+
+                // MODIFIED: Open exam through proctored wrapper page instead of direct URL
+                // This allows monitoring code to run in the same domain context
+                const proctorUrl = `/proctored-exam?exam_url=${encodeURIComponent(examUrl)}&participant_id=${participantId}&session_id=${sessionId}`;
+                window.open(proctorUrl, '_blank', 'width=1200,height=800');
+
+                // Show exam end code section
+                showExamEndCodeSection();
+
+                return false; // Prevent default link behavior
+            } catch (error) {
+                console.error('Error starting exam monitoring:', error);
+                alert('Error saat memulai monitoring. Silakan coba lagi.');
+                return false;
+            }
+        }
+        
+        /**
+         * Handle logout button click
+         */
+        function handleLogoutClick() {
+            console.log('[LOGOUT] Logout button clicked');
+            
+            let message = 'Apakah Anda yakin ingin logout?';
+            
+            // Add violation info jika ada
+            if (window.examMonitor) {
+                const summary = window.examMonitor.getViolationsSummary();
+                if (summary.totalViolations > 0) {
+                    message += `\n\nTotal pelanggaran terdeteksi: ${summary.totalViolations}`;
+                    message += `\nTotal durasi: ${summary.totalDurationSeconds} detik`;
+                }
+            }
+            
+            if (confirm(message)) {
+                console.log('[LOGOUT] User confirmed logout');
+                // Do actual logout
+                window.location.href = '{{ url_for("participant_logout") }}';
+            } else {
+                console.log('[LOGOUT] User cancelled logout');
+            }
+        }
+        
+        /**
+         * Confirm logout (simplified - violations already uploaded realtime)
+         */
+        function confirmLogout() {
+            if (!examMonitor) {
+                return confirm('Apakah Anda yakin ingin logout?');
+            }
+            
+            const summary = examMonitor.getViolationsSummary();
+            const violationCount = summary.totalViolations;
+            
+            let message = 'Apakah Anda yakin ingin logout?';
+            
+            if (violationCount > 0) {
+                message += `\n\nTotal pelanggaran yang terdeteksi: ${violationCount}`;
+                message += `\nTotal durasi: ${summary.totalDurationSeconds} detik`;
+                message += `\n\nData telah diunggah realtime ke server.`;
+            }
+            
+            if (confirm(message)) {
+                // Finalize exam results
+                finalizeExamResults();
+                return false;
+            }
+            
+            return false;
+        }
+        
+        /**
+         * Finalize exam results and then logout
+         */
+        async function finalizeExamResults() {
+            try {
+                const response = await fetch('/api/upload-violations', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        participant_id: {{ participant.id if participant else 'null' }}
+                    })
+                });
+                
+                const data = await response.json();
+                console.log('Exam results finalized:', data);
+                
+                if (data.status === 'success') {
+                    alert(`✅ Laporan Ujian Finalized\n\n` +
+                          `Total Pelanggaran: ${data.total_violations}\n` +
+                          `Total Durasi: ${data.total_violation_time} detik\n` +
+                          `Keputusan: ${data.final_decision}`);
+                }
+                
+                // Logout after finalization
+                window.location.href = '{{ url_for("participant_logout") }}';
+            } catch (error) {
+                console.error('Error finalizing exam:', error);
+                // Still logout even if finalization fails
+                window.location.href = '{{ url_for("participant_logout") }}';
+            }
+        }
+        
+        /**
+         * Upload violations to server (for manual calls)
+         */
+        function uploadViolations(violations, participantId) {
+            if (!violations || violations.length === 0) {
+                return;
+            }
+            
+            console.log('Uploading violations:', violations);
+            
+            fetch('/api/upload-violations', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    participant_id: participantId,
+                    violations: violations
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('Violations uploaded:', data);
+                if (data.status === 'success') {
+                    alert(`✅ Laporan Ujian Tersimpan\n\n` +
+                          `Total Pelanggaran: ${data.total_violations}\n` +
+                          `Total Durasi: ${data.total_violation_time} detik\n` +
+                          `Keputusan: ${data.final_decision}`);
+                }
+            })
+            .catch(error => {
+                console.error('Error uploading violations:', error);
+            });
+        }
+        
+        /**
+         * Auto-finalize violations on exam end time
+         */
+        function setupAutoFinalizeExam(endTime, participantId) {
+            const now = new Date();
+            const endDateTime = new Date(endTime);
+            
+            if (endDateTime > now) {
+                const timeUntilEnd = endDateTime - now;
+                
+                setTimeout(() => {
+                    if (examMonitor) {
+                        examMonitor.stopMonitoring();
+                        finalizeExamResults();
+                    }
+                }, timeUntilEnd);
+            }
+        }
+
+        /**
+         * Initialize on page load
+         */
+        document.addEventListener('DOMContentLoaded', function() {
+            // Disable logout button by default
+            disableLogoutButton();
+
+            // Allow Enter key to submit exam end code
+            const examEndCodeInput = document.getElementById('exam-end-code-input');
+            if (examEndCodeInput) {
+                examEndCodeInput.addEventListener('keypress', function(event) {
+                    if (event.key === 'Enter') {
+                        submitExamEndCode();
+                    }
+                });
+            }
+
+            // Setup auto-finalize if exam is running
+            {% if participant and participant.end_time and exam_status == 'Sedang Berlangsung' %}
+                setupAutoFinalizeExam('{{ participant.end_time.isoformat() }}', {{ participant.id }});
+            {% endif %}
+        });
+    </script>
+</body>
+</html>

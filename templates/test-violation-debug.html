@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <title>Manual Violation Test - Debug</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+</head>
+<body>
+    <div style="padding: 20px; font-family: monospace;">
+        <h1>Manual Violation Test - Debug Console</h1>
+        <p>Buka F12 Console untuk lihat debug messages</p>
+        
+        <div id="status" style="padding: 10px; margin: 10px 0; background: #f0f0f0; border-radius: 5px;">
+            Status: Loading...
+        </div>
+        
+        <button onclick="testViolationUpload()" style="padding: 10px 20px; background: #dc3545; color: white; cursor: pointer;">
+            Test: Trigger Violation Upload
+        </button>
+        
+        <button onclick="testDirectAPI()" style="padding: 10px 20px; background: #007bff; color: white; cursor: pointer; margin-left: 10px;">
+            Test: Direct API Call
+        </button>
+        
+        <button onclick="checkGlobalMonitor()" style="padding: 10px 20px; background: #28a745; color: white; cursor: pointer; margin-left: 10px;">
+            Test: Check Global Monitor
+        </button>
+    </div>
+
+    <script>
+        console.log('[DEBUG] Manual violation test page loaded');
+        
+        // Load exam-monitor.js
+        const script = document.createElement('script');
+        script.src = '/static/exam-monitor.js';
+        script.onload = function() {
+            console.log('[DEBUG] exam-monitor.js loaded successfully');
+            updateStatus('exam-monitor.js loaded ✓');
+        };
+        script.onerror = function() {
+            console.error('[ERROR] Failed to load exam-monitor.js');
+            updateStatus('ERROR: Failed to load exam-monitor.js');
+        };
+        document.head.appendChild(script);
+        
+        function updateStatus(msg) {
+            document.getElementById('status').textContent = 'Status: ' + msg;
+            console.log('[STATUS]', msg);
+        }
+        
+        function testViolationUpload() {
+            console.log('\n' + '='.repeat(80));
+            console.log('[TEST] Manual Violation Upload Test');
+            console.log('='.repeat(80));
+            
+            try {
+                // Create monitor manually
+                if (typeof ExamProctorMonitor === 'undefined') {
+                    console.error('[ERROR] ExamProctorMonitor not defined!');
+                    updateStatus('ERROR: ExamProctorMonitor not defined');
+                    return;
+                }
+                
+                const monitor = new ExamProctorMonitor({
+                    examUrl: 'http://example.com',
+                    participantId: 2,
+                    sessionId: 2
+                });
+                
+                console.log('[OK] Monitor created:', monitor);
+                updateStatus('Monitor created, triggering manual violation...');
+                
+                // Manually trigger a violation
+                monitor.recordViolation('TEST_MANUAL', 'Manual test violation from debug page');
+                console.log('[OK] recordViolation() called');
+                
+            } catch (error) {
+                console.error('[ERROR]', error);
+                updateStatus('ERROR: ' + error.message);
+            }
+        }
+        
+        async function testDirectAPI() {
+            console.log('\n' + '='.repeat(80));
+            console.log('[TEST] Direct API Call Test');
+            console.log('='.repeat(80));
+            
+            const payload = {
+                participant_id: 2,
+                session_id: 2,
+                violation_type: 'TEST_DIRECT_API',
+                description: 'Direct API test from debug page',
+                startTime: new Date().toISOString(),
+                evidence: null
+            };
+            
+            console.log('[DATA] Sending payload:', payload);
+            
+            try {
+                const response = await fetch('/api/record-violation', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+                
+                console.log('[RESPONSE] Status:', response.status, response.statusText);
+                const data = await response.json();
+                console.log('[RESPONSE] Body:', data);
+                
+                if (response.ok) {
+                    updateStatus(`API Success! Violation ID: ${data.violation_id}`);
+                } else {
+                    updateStatus(`API Error: ${data.message}`);
+                }
+            } catch (error) {
+                console.error('[ERROR] API call failed:', error);
+                updateStatus('ERROR: ' + error.message);
+            }
+        }
+        
+        function checkGlobalMonitor() {
+            console.log('\n' + '='.repeat(80));
+            console.log('[TEST] Check Global Monitor');
+            console.log('='.repeat(80));
+            
+            console.log('[CHECK] window.examMonitor:', typeof window.examMonitor);
+            console.log('[CHECK] window.ExamProctorMonitor:', typeof window.ExamProctorMonitor);
+            
+            if (window.examMonitor) {
+                console.log('[INFO] Global monitor exists:', window.examMonitor);
+                console.log('[INFO] Violations recorded:', window.examMonitor.violations.length);
+                console.log('[INFO] Monitoring status:', window.examMonitor.isMonitoring);
+            } else {
+                console.log('[WARN] No global examMonitor instance');
+            }
+            
+            updateStatus('Check complete - see console');
+        }
+        
+        updateStatus('Ready for testing');
+    </script>
+</body>
+</html>

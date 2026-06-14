@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kelola Peserta Ujian - Proctoring App</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="dashboard-container">
+        <!-- Navbar -->
+        <nav class="navbar">
+            <div class="navbar-content">
+                <h2 class="navbar-title">Proctoring App</h2>
+                <div class="navbar-user">
+                    <span class="user-greeting">Selamat datang, Admin!</span>
+                    <a href="{{ url_for('logout') }}" class="logout-btn">Logout</a>
+                </div>
+            </div>
+        </nav>
+        
+        <!-- Main Content -->
+        <div class="dashboard-content">
+            <div class="dashboard-header">
+                <div class="header-top">
+                    <div>
+                        <h1>Kelola Peserta Ujian</h1>
+                        <p class="dashboard-subtitle">Tambahkan dan kelola peserta ujian</p>
+                    </div>
+                    <a href="{{ url_for('dashboard') }}" class="back-btn">← Kembali ke Dashboard</a>
+                </div>
+            </div>
+            
+            <!-- Error Message -->
+            {% if error %}
+                <div class="error-message">
+                    ❌ {{ error }}
+                </div>
+            {% endif %}
+            
+            <!-- Form Tambah Participant -->
+            <div class="form-card">
+                <h2>Tambah Peserta Ujian Baru</h2>
+                <form method="POST" enctype="multipart/form-data" class="participant-form">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="participant_number">Nomor Peserta</label>
+                            <input 
+                                type="text" 
+                                id="participant_number" 
+                                name="participant_number" 
+                                placeholder="Contoh: P001" 
+                                required
+                            >
+                        </div>
+                        <div class="form-group">
+                            <label for="participant_name">Nama Peserta</label>
+                            <input 
+                                type="text" 
+                                id="participant_name" 
+                                name="participant_name" 
+                                placeholder="Masukkan nama lengkap" 
+                                required
+                            >
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="session_id">Pilih Sesi Ujian</label>
+                            <select id="session_id" name="session_id" required>
+                                <option value="">-- Pilih Sesi --</option>
+                                {% for sess in sessions %}
+                                    <option value="{{ sess.id }}">{{ sess.session_name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="face_photo">Upload Foto Wajah</label>
+                            <input 
+                                type="file" 
+                                id="face_photo" 
+                                name="face_photo" 
+                                accept="image/*"
+                                required
+                            >
+                            <small>Format: JPG, PNG, GIF (Max: 5MB)</small>
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="submit-btn">Tambah Peserta</button>
+                </form>
+            </div>
+            
+            <!-- Daftar Participants -->
+            <div class="participants-card">
+                <h2>Daftar Peserta Ujian</h2>
+                
+                {% if participants %}
+                    <div class="participants-table">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>No</th>
+                                    <th>Nomor Peserta</th>
+                                    <th>Nama Peserta</th>
+                                    <th>Sesi Ujian</th>
+                                    <th>Foto Wajah</th>
+                                    <th>Dibuat Tanggal</th>
+                                    <th>Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for participant in participants %}
+                                    <tr>
+                                        <td>{{ loop.index }}</td>
+                                        <td><strong>{{ participant.participant_number }}</strong></td>
+                                        <td>{{ participant.participant_name }}</td>
+                                        <td>{{ participant.session_name or 'N/A' }}</td>
+                                        <td>
+                                            {% if participant.face_photo_url %}
+                                                <a href="{{ participant.face_photo_url }}" target="_blank" class="photo-link">
+                                                    Lihat Foto
+                                                </a>
+                                            {% else %}
+                                                <span class="no-photo">Belum ada</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>{{ participant.created_at }}</td>
+                                        <td>
+                                            <div class="action-buttons">
+                                                <a href="{{ url_for('edit_participant', participant_id=participant.id) }}" class="edit-btn">Edit</a>
+                                                <form method="POST" action="{{ url_for('delete_participant', participant_id=participant.id) }}" class="delete-form">
+                                                    <button type="submit" class="delete-btn" onclick="return confirm('Yakin hapus peserta ini?')">Hapus</button>
+                                                </form>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="empty-state">
+                        <p>Belum ada peserta ujian. Tambahkan peserta baru terlebih dahulu.</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</body>
+</html>

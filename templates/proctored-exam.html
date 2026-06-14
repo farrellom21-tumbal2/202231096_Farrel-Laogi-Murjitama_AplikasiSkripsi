@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Proctored Exam</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f5f5;
+            overflow: hidden;
+        }
+        
+        .proctored-exam-container {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .exam-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            z-index: 1000;
+        }
+        
+        .header-info {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+        
+        .header-title {
+            font-size: 16px;
+            font-weight: 600;
+        }
+        
+        .monitoring-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(255,255,255,0.2);
+            padding: 8px 12px;
+            border-radius: 5px;
+            font-size: 13px;
+        }
+        
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background: #4caf50;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            font-size: 14px;
+        }
+        
+        .warning-banner {
+            background: #fff3cd;
+            color: #856404;
+            padding: 12px 20px;
+            border-bottom: 1px solid #ffc107;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 13px;
+        }
+        
+        .warning-message {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .exam-content {
+            flex: 1;
+            overflow: hidden;
+            position: relative;
+        }
+        
+        .exam-iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+        
+        .violation-indicator {
+            position: fixed;
+            top: 80px;
+            right: 20px;
+            background: #dc3545;
+            color: white;
+            padding: 12px 16px;
+            border-radius: 5px;
+            font-size: 13px;
+            z-index: 999;
+            display: none;
+            animation: slideIn 0.3s ease-out;
+        }
+        
+        .violation-indicator.show {
+            display: block;
+        }
+        
+        @keyframes slideIn {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        
+        .violations-counter {
+            background: rgba(0,0,0,0.2);
+            padding: 8px 12px;
+            border-radius: 5px;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div class="proctored-exam-container">
+        <!-- Header -->
+        <div class="exam-header">
+            <div class="header-info">
+                <div class="header-title">UJIAN TERPANTAU (PROCTORED)</div>
+                <div class="monitoring-status">
+                    <div class="status-dot"></div>
+                    <span>Monitoring Aktif - Aktivitas Anda dicatat</span>
+                </div>
+            </div>
+            <div class="header-right">
+                <div class="violations-counter">
+                    Pelanggaran: <span id="violation-count">0</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Warning Banner -->
+        <div class="warning-banner">
+            <div class="warning-message">
+                <span>⚠️</span>
+                <span>Jangan meninggalkan halaman ini. Setiap upaya pindah tab, minimize window, atau mengakses URL lain akan dicatat sebagai pelanggaran.</span>
+            </div>
+        </div>
+        
+        <!-- Exam Content -->
+        <div class="exam-content">
+            <iframe id="exam-iframe" class="exam-iframe" src="" allow="camera; microphone; accelerometer; gyroscope; magnetometer"></iframe>
+        </div>
+    </div>
+    
+    <div id="violation-indicator" class="violation-indicator"></div>
+    
+    <script src="{{ url_for('static', filename='exam-monitor.js') }}"></script>
+    <script>
+        console.log('[PROCTORED-EXAM] Page initialized');
+        
+        // Get exam parameters from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const examUrl = urlParams.get('exam_url');
+        const participantId = parseInt(urlParams.get('participant_id'));
+        const sessionId = parseInt(urlParams.get('session_id'));
+        
+        console.log('[PROCTORED-EXAM] URL Parameters:');
+        console.log(`   Exam URL: ${examUrl}`);
+        console.log(`   Participant ID: ${participantId}`);
+        console.log(`   Session ID: ${sessionId}`);
+        
+        // Validate parameters
+        if (!examUrl || !participantId || !sessionId) {
+            console.error('[PROCTORED-EXAM] ERROR: Missing parameters!');
+            document.body.innerHTML = '<div style="padding: 20px; color: #d32f2f;">Error: Missing exam parameters</div>';
+        } else {
+            console.log('[PROCTORED-EXAM] Parameters valid, starting initialization');
+            
+            // Load exam URL in iframe
+            document.getElementById('exam-iframe').src = examUrl;
+            console.log('[PROCTORED-EXAM] Exam URL set in iframe');
+            
+            // Initialize monitoring
+            initializeProctorMonitoring({
+                examUrl: examUrl,
+                participantId: participantId,
+                sessionId: sessionId
+            });
+        }
+        
+        /**
+         * Initialize proctoring monitoring on this page
+         */
+        function initializeProctorMonitoring(config) {
+            console.log('\n[INIT] Starting proctoring monitor initialization');
+            console.log('[INIT] Config:', config);
+            
+            // Create monitor instance
+            console.log('[INIT] Creating ExamProctorMonitor instance...');
+            const examMonitor = new ExamProctorMonitor({
+                examUrl: config.examUrl,
+                participantId: config.participantId,
+                sessionId: config.sessionId
+            });
+            
+            console.log('[INIT] Monitor created successfully');
+            console.log('[INIT] Monitor details:');
+            console.log(`   isMonitoring: ${examMonitor.isMonitoring}`);
+            console.log(`   participantId: ${examMonitor.participantId}`);
+            console.log(`   sessionId: ${examMonitor.sessionId}`);
+            
+            // Make it globally accessible
+            window.examMonitor = examMonitor;
+            console.log('[INIT] Monitor set to window.examMonitor (global)');
+            
+            // Update violation counter
+            const updateViolationCount = () => {
+                const count = examMonitor.violations.length;
+                document.getElementById('violation-count').textContent = count;
+                console.log(`[COUNTER] Violations: ${count}`);
+            };
+            
+            // Show violation indicator
+            const showViolationIndicator = (message) => {
+                const indicator = document.getElementById('violation-indicator');
+                indicator.textContent = message;
+                indicator.classList.add('show');
+                console.log(`[INDICATOR] Showing: ${message}`);
+                setTimeout(() => {
+                    indicator.classList.remove('show');
+                }, 5000);
+            };
+            
+            // Override recordViolation to update UI and ensure upload happens
+            const originalRecordViolation = examMonitor.recordViolation.bind(examMonitor);
+            examMonitor.recordViolation = function(violationType, description) {
+                console.log('\n' + '='.repeat(80));
+                console.log(`[WRAPPER] VIOLATION DETECTED: ${violationType}`);
+                console.log('='.repeat(80));
+                console.log(`   Description: ${description}`);
+                console.log(`   Time: ${new Date().toISOString()}`);
+                
+                showViolationIndicator(`[VIOLATION] ${violationType}`);
+                updateViolationCount();
+                
+                // Call original which handles capture and upload
+                console.log('[WRAPPER] Calling original recordViolation...');
+                originalRecordViolation(violationType, description);
+                console.log('[WRAPPER] Original recordViolation returned');
+            };
+            
+            // Prevent leaving the page
+            window.addEventListener('beforeunload', (e) => {
+                if (examMonitor.isMonitoring && !examMonitor.isExamEnded) {
+                    e.preventDefault();
+                    e.returnValue = '';
+                    return '';
+                }
+            });
+            
+            // Prevent context menu
+            document.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+                return false;
+            });
+            
+            console.log('[INIT] Initialization complete');
+            console.log('[INIT] Ready to detect violations\n');
+        }
+    </script>
+</body>
+</html>

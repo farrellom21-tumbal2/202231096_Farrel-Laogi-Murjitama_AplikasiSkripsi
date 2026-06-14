@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - Proctoring App</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="dashboard-container">
+        <!-- Navbar -->
+        <nav class="navbar">
+            <div class="navbar-content">
+                <h2 class="navbar-title">Proctoring App</h2>
+                <div class="navbar-user">
+                    <span class="user-greeting">Selamat datang, {{ username }}!</span>
+                    <a href="{{ url_for('logout') }}" class="logout-btn">Logout</a>
+                </div>
+            </div>
+        </nav>
+        
+        <!-- Main Content -->
+        <div class="dashboard-content">
+            <div class="dashboard-header">
+                <h1>Dashboard Admin</h1>
+                <p class="dashboard-subtitle">Kelola sistem proctoring Anda di sini</p>
+            </div>
+            
+            <div class="dashboard-body">
+                <div class="welcome-card">
+                    <h2>Selamat Datang di Admin Panel</h2>
+                    <p>Kelola sistem proctoring Anda melalui menu di bawah ini</p>
+                </div>
+                
+                <div class="menu-card">
+                    <div class="menu-icon">📋</div>
+                    <h3>Kelola Sesi Ujian</h3>
+                    <p>Tambahkan, edit, dan kelola sesi ujian</p>
+                    <a href="{{ url_for('admin_sessions') }}" class="menu-btn">Akses Menu →</a>
+                </div>
+                
+                <div class="menu-card">
+                    <div class="menu-icon">👥</div>
+                    <h3>Kelola Peserta Ujian</h3>
+                    <p>Tambahkan peserta, upload foto, pilih sesi</p>
+                    <a href="{{ url_for('admin_participants') }}" class="menu-btn">Akses Menu →</a>
+                </div>
+                
+                <div class="menu-card">
+                    <div class="menu-icon">📊</div>
+                    <h3>Laporan Pelanggaran & Hasil</h3>
+                    <p>Lihat riwayat pelanggaran dan keputusan ujian peserta</p>
+                    <a href="{{ url_for('admin_violations') }}" class="menu-btn">Akses Menu →</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Peserta - Proctoring App</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="{{ url_for('static', filename='exam-monitor-ENHANCED.js') }}"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        /* Navbar */
+        .navbar {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .navbar h1 {
+            color: #333;
+            font-size: 24px;
+            margin: 0;
+        }
+
+        .navbar-right {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .user-name {
+            color: #666;
+            font-weight: 600;
+        }
+
+        .logout-btn {
+            padding: 10px 20px;
+            background: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        .logout-btn:hover:not(:disabled) {
+            background: #c82333;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(220, 53, 69, 0.3);
+        }
+
+        .logout-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        /* Main Content */
+        .dashboard {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 30px;
+            margin-bottom: 20px;
+        }
+
+        .dashboard h2 {
+            color: #333;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+
+        /* Identity Card */
+        .identity-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 25px;
+        }
+
+        .identity-item {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+
+        .identity-item label {
+            display: block;
+            color: #666;
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+        }
+
+        .identity-item span {
+            display: block;
+            color: #333;
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .photo-section {
+            margin-top: 20px;
+            text-align: center;
+        }
+
+        .photo-section img {
+            max-width: 200px;
+            height: auto;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
+
+        /* Exam Info */
+        .exam-info {
+            background: #f0f7ff;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+            margin-bottom: 25px;
+        }
+
+        .exam-info p {
+            margin: 10px 0;
+            color: #333;
+        }
+
+        .exam-status {
+            display: inline-block;
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-weight: 600;
+            margin-top: 10px;
+            font-size: 14px;
+        }
+
+        .exam-status.active {
+            background: #28a745;
+            color: white;
+        }
+
+        .exam-status.pending {
+            background: #ffc107;
+            color: #333;
+        }
+
+        .exam-status.ended {
+            background: #6c757d;
+            color: white;
+        }
+
+        /* Exam Control Section */
+        .exam-control {
+            background: #fff3cd;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #ffc107;
+            margin-bottom: 25px;
+        }
+
+        .exam-control h3 {
+            color: #856404;
+            margin-bottom: 15px;
+        }
+
+        .exam-control-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        .control-button {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 14px;
+            transition: all 0.3s;
+            text-align: center;
+        }
+
+        .btn-start {
+            background: #28a745;
+            color: white;
+        }
+
+        .btn-start:hover {
+            background: #218838;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3);
+        }
+
+        .btn-start:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        .btn-end {
+            background: #dc3545;
+            color: white;
+        }
+
+        .btn-end:hover:not(:disabled) {
+            background: #c82333;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(220, 53, 69, 0.3);
+        }
+
+        .btn-end:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        /* Exam End Code Section */
+        .exam-end-section {
+            display: none;
+            background: #ffe0e0;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #dc3545;
+            margin-bottom: 25px;
+        }
+
+        .exam-end-section.show {
+            display: block;
+        }
+
+        .exam-end-section h3 {
+            color: #721c24;
+            margin-bottom: 15px;
+        }
+
+        .code-input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .code-input-group input {
+            flex: 1;
+            padding: 10px;
+            border: 2px solid #dc3545;
+            border-radius: 5px;
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .code-input-group button {
+            padding: 10px 20px;
+            background: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        .code-input-group button:hover {
+            background: #c82333;
+        }
+
+        .code-message {
+            padding: 10px;
+            margin-top: 10px;
+            border-radius: 5px;
+            font-weight: 600;
+        }
+
+        .code-message.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .code-message.success {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        /* Instructions */
+        .instructions {
+            background: #e7f3ff;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+
+        .instructions h3 {
+            color: #004085;
+            margin-bottom: 15px;
+        }
+
+        .instructions ul {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .instructions li {
+            padding: 10px 0;
+            color: #333;
+            border-bottom: 1px solid #d0e3ff;
+            padding-left: 25px;
+            position: relative;
+        }
+
+        .instructions li:last-child {
+            border-bottom: none;
+        }
+
+        .instructions li:before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: #667eea;
+            font-weight: 600;
+        }
+
+        /* Modal Alert */
+        .alert-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 10000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .alert-modal.show {
+            display: flex;
+        }
+
+        .alert-modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            max-width: 500px;
+            text-align: center;
+        }
+
+        .alert-modal-content h2 {
+            color: #333;
+            margin-bottom: 15px;
+        }
+
+        .alert-modal-content p {
+            color: #666;
+            margin-bottom: 20px;
+            line-height: 1.6;
+        }
+
+        .alert-modal-button {
+            padding: 10px 30px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        .alert-modal-button:hover {
+            background: #5568d3;
+        }
+
+        /* Exam Window Info */
+        .window-info {
+            background: #f0f0f0;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+            font-size: 13px;
+            color: #666;
+        }
+
+        .window-info strong {
+            display: block;
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        @media (max-width: 768px) {
+            .identity-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .exam-control-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .navbar {
+                flex-direction: column;
+                gap: 15px;
+                text-align: center;
+            }
+
+            .navbar-right {
+                width: 100%;
+                justify-content: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Navbar -->
+        <div class="navbar">
+            <h1>🎓 Proctoring System</h1>
+            <div class="navbar-right">
+                <span class="user-name">{{ session.get('participant_name') }}</span>
+                <button id="logout-btn" class="logout-btn" onclick="handleLogoutClick()" disabled title="Selesaikan ujian terlebih dahulu">
+                    Logout
+                </button>
+            </div>
+        </div>
+
+        <!-- Main Dashboard -->
+        <div class="dashboard">
+            <h2>📋 Identitas Peserta</h2>
+            
+            {% if participant %}
+                <div class="identity-grid">
+                    <div class="identity-item">
+                        <label>Nomor Peserta</label>
+                        <span>{{ participant.participant_number }}</span>
+                    </div>
+                    <div class="identity-item">
+                        <label>Nama Peserta</label>
+                        <span>{{ participant.participant_name }}</span>
+                    </div>
+                </div>
+
+                {% if participant.face_photo_url %}
+                    <div class="photo-section">
+                        <label style="display: block; margin-bottom: 10px; color: #666; font-weight: 600;">Foto Peserta</label>
+                        <img src="{{ participant.face_photo_url }}" alt="Foto Peserta">
+                    </div>
+                {% endif %}
+            {% endif %}
+        </div>
+
+        <!-- Exam Info -->
+        {% if participant and participant.session_name %}
+            <div class="dashboard">
+                <h2>📚 Informasi Ujian</h2>
+                
+                <div class="exam-info">
+                    <p><strong>Nama Ujian:</strong> {{ participant.session_name }}</p>
+                    {% if participant.start_time %}
+                        <p><strong>Waktu Mulai:</strong> {{ participant.start_time.strftime('%d %B %Y - %H:%M') }}</p>
+                    {% endif %}
+                    {% if participant.end_time %}
+                        <p><strong>Waktu Selesai:</strong> {{ participant.end_time.strftime('%d %B %Y - %H:%M') }}</p>
+                    {% endif %}
+                    <p><strong>Status Ujian:</strong> 
+                        <span class="exam-status {{ 'active' if exam_status == 'Sedang Berlangsung' else 'pending' if exam_status == 'Belum Dimulai' else 'ended' }}">
+                            {{ exam_status }}
+                        </span>
+                    </p>
+                    <p><strong>🔴 Monitoring Status:</strong> <span id="monitoring-status" style="color: #dc3545; font-weight: 600;">Belum Aktif</span></p>
+                </div>
+
+                <!-- Exam Control -->
+                <div class="exam-control">
+                    <h3>🎯 Kontrol Ujian</h3>
+                    <div class="exam-control-grid">
+                        <button class="control-button btn-start" 
+                                onclick="startExamWindow()" 
+                                {% if exam_status != 'Sedang Berlangsung' %}disabled{% endif %}>
+                            ▶️ Mulai Ujian
+                        </button>
+                        <button class="control-button btn-end" 
+                                onclick="endExamWindow()" 
+                                id="end-exam-btn"
+                                disabled>
+                            ⏹️ Selesaikan Ujian
+                        </button>
+                    </div>
+                    <div class="window-info">
+                        <strong>⚠️ PENTING:</strong>
+                        Window ujian akan dibuka di window terpisah dengan monitoring aktif. Browser bar akan disembunyikan untuk mencegah navigasi. Hanya 1 window ujian yang diperbolehkan.
+                    </div>
+                </div>
+
+                <!-- Exam End Code Section -->
+                <div class="exam-end-section" id="exam-end-section">
+                    <h3>✅ Selesaikan Ujian</h3>
+                    <p>Masukkan kode akhir ujian untuk menyelesaikan:</p>
+                    <div class="code-input-group">
+                        <input type="text" 
+                               id="exam-end-code-input" 
+                               placeholder="Masukkan kode akhir ujian" 
+                               autocomplete="off">
+                        <button onclick="submitExamEndCode()">Verifikasi</button>
+                    </div>
+                    <div id="exam-end-message"></div>
+                </div>
+
+                <!-- Instructions -->
+                <div class="instructions">
+                    <h3>📌 Petunjuk Penting & Monitoring</h3>
+                    <ul>
+                        <li>Klik "Mulai Ujian" untuk membuka window ujian dengan monitoring aktif</li>
+                        <li>Sistem akan mendeteksi jika Anda meninggalkan halaman ujian (tab switch, blur, back)</li>
+                        <li>Setiap pelanggaran akan dicatat dengan bukti screenshot otomatis</li>
+                        <li>Dilarang membuka tab/window baru atau beralih ke aplikasi lain saat ujian</li>
+                        <li>Jangan tutup window ujian sampai Anda menyelesaikan ujian</li>
+                        <li>Setelah selesai ujian, masukkan kode akhir ujian yang diberikan pengawas</li>
+                        <li>Klik "Logout" untuk keluar dari sistem (hanya tersedia setelah ujian selesai)</li>
+                        <li>Semua aktivitas termasuk pelanggaran akan dilaporkan kepada admin</li>
+                    </ul>
+                </div>
+            </div>
+        {% else %}
+            <div class="dashboard">
+                <p style="color: #dc3545; font-weight: 600;">⚠️ Anda belum ditugaskan ke sesi ujian apapun. Hubungi admin untuk informasi lebih lanjut.</p>
+            </div>
+        {% endif %}
+    </div>
+
+    <!-- Alert Modal -->
+    <div class="alert-modal" id="alert-modal">
+        <div class="alert-modal-content">
+            <h2 id="alert-title">Peringatan</h2>
+            <p id="alert-message">Pesan</p>
+            <button class="alert-modal-button" onclick="closeAlertModal()">Tutup</button>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * EXAM MONITORING SYSTEM - COMPLETE REDESIGN
+         */
+
+        let examWindow = null;
+        let isExamActive = false;
+        let participantId = {{ participant.id if participant else 'null' }};
+        let sessionId = {{ participant.session_id if participant else 'null' }};
+        let examUrl = '{{ participant.exam_url if participant else "" }}';
+
+        console.log('='.repeat(80));
+        console.log('[DASHBOARD] Dashboard initialized');
+        console.log(`[DASHBOARD] Participant ID: ${participantId}`);
+        console.log(`[DASHBOARD] Session ID: ${sessionId}`);
+        console.log(`[DASHBOARD] Exam URL: ${examUrl.substring(0, 50)}...`);
+        console.log('='.repeat(80));
+
+        /**
+         * Start exam in new window with monitoring
+         * CRITICAL: Prevent multiple windows, hide address bar
+         */
+        function startExamWindow() {
+            console.log('\n[EXAM-START] Initializing exam window...');
+
+            // Check if exam window already open
+            if (examWindow && !examWindow.closed) {
+                console.log('[EXAM-START] ⚠️ Exam window already open!');
+                showAlert('Peringatan', 'Window ujian sudah terbuka! Gunakan window yang sudah ada.');
+                examWindow.focus();
+                return;
+            }
+
+            // Log exam start
+            fetch('/api/exam-start', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    participant_id: participantId,
+                    session_id: sessionId
+                })
+            }).then(r => r.json()).then(d => {
+                console.log('[EXAM-START] Exam start logged:', d);
+            });
+
+            // Open exam window with MINIMAL chrome (hide address bar, search bar, etc)
+            const proctorUrl = `/proctored-exam?exam_url=${encodeURIComponent(examUrl)}&participant_id=${participantId}&session_id=${sessionId}`;
+            
+            console.log('[EXAM-START] Opening exam window...');
+            console.log(`[EXAM-START] URL: ${proctorUrl}`);
+            
+            // Window features: minimize chrome for security
+            const features = [
+                'width=1200',
+                'height=800',
+                'scrollbars=no',          // No scrollbars
+                'menubar=no',             // No menu
+                'toolbar=no',             // No toolbar (address bar hidden)
+                'location=no',            // No location bar
+                'resizable=no',           // No resize
+                'status=no',              // No status bar
+                'titlebar=yes'            // Keep title (to show window is exam)
+            ].join(',');
+
+            try {
+                examWindow = window.open(proctorUrl, 'ExamWindow', features);
+                
+                if (!examWindow) {
+                    console.error('[EXAM-START] ❌ Failed to open window (popup blocker?)');
+                    showAlert('Error', 'Tidak bisa membuka window ujian. Pastikan popup blocker dimatikan.');
+                    return;
+                }
+
+                // Try to remove address bar by focusing and hiding (some browsers allow this)
+                examWindow.focus();
+                
+                // Try keyboard shortcut F11 for fullscreen (works in some browsers)
+                setTimeout(() => {
+                    try {
+                        examWindow.document.body.style.margin = '0';
+                        examWindow.document.body.style.padding = '0';
+                    } catch (e) {
+                        console.log('[EXAM-START] Cannot access exam window DOM (cross-origin)');
+                    }
+                }, 500);
+
+                console.log('[EXAM-START] ✅ Exam window opened successfully');
+                
+                // Update UI
+                isExamActive = true;
+                document.getElementById('monitoring-status').textContent = '🟢 Aktif';
+                document.getElementById('monitoring-status').style.color = '#28a745';
+                document.getElementById('end-exam-btn').disabled = false;
+                document.querySelector('.btn-start').disabled = true;
+                
+                // Show exam end section
+                document.getElementById('exam-end-section').classList.add('show');
+                document.getElementById('exam-end-code-input').focus();
+
+                console.log('[EXAM-START] UI updated - monitoring active');
+
+                // Monitor exam window status
+                const windowCheckInterval = setInterval(() => {
+                    if (examWindow && examWindow.closed) {
+                        console.log('[EXAM-START] ⚠️ Exam window was closed');
+                        clearInterval(windowCheckInterval);
+                        isExamActive = false;
+                        document.getElementById('monitoring-status').textContent = '🔴 Window Ditutup';
+                        document.getElementById('monitoring-status').style.color = '#dc3545';
+                        showAlert('Peringatan', 'Window ujian telah ditutup! Monitoring dihentikan.');
+                        
+                        // Re-enable start button
+                        document.querySelector('.btn-start').disabled = false;
+                    }
+                }, 1000);
+
+            } catch (e) {
+                console.error('[EXAM-START] ❌ Error opening window:', e);
+                showAlert('Error', `Gagal membuka window: ${e.message}`);
+            }
+        }
+
+        /**
+         * End exam window
+         */
+        function endExamWindow() {
+            if (!examWindow || examWindow.closed) {
+                console.log('[EXAM-END] ⚠️ Exam window not open');
+                showAlert('Peringatan', 'Window ujian tidak terbuka.');
+                return;
+            }
+
+            console.log('[EXAM-END] Closing exam window...');
+            
+            try {
+                // Try to notify exam monitor to finalize
+                if (examWindow.examMonitor) {
+                    console.log('[EXAM-END] Notifying exam monitor...');
+                    examWindow.examMonitor.endExamWithCode();
+                }
+                
+                // Close window
+                examWindow.close();
+                examWindow = null;
+                
+                isExamActive = false;
+                document.getElementById('monitoring-status').textContent = '⏹️ Selesai';
+                document.getElementById('monitoring-status').style.color = '#6c757d';
+                
+                console.log('[EXAM-END] ✅ Exam window closed');
+                showAlert('Info', 'Window ujian telah ditutup. Masukkan kode akhir ujian untuk menyelesaikan.');
+                
+            } catch (e) {
+                console.error('[EXAM-END] Error closing window:', e);
+                examWindow = null;
+            }
+        }
+
+        /**
+         * Submit exam end code
+         */
+        async function submitExamEndCode() {
+            const code = document.getElementById('exam-end-code-input').value.trim();
+            const message = document.getElementById('exam-end-message');
+
+            if (!code) {
+                message.innerHTML = '<div class="code-message error">❌ Kode tidak boleh kosong!</div>';
+                return;
+            }
+
+            console.log('[CODE-SUBMIT] Verifying exam end code...');
+            message.innerHTML = '<div class="code-message">⏳ Memverifikasi kode...</div>';
+
+            try {
+                const response = await fetch('/api/end-exam', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        participant_id: participantId,
+                        session_id: sessionId,
+                        exam_end_code: code
+                    })
+                });
+
+                const data = await response.json();
+                console.log('[CODE-SUBMIT] Server response:', data);
+
+                if (response.ok && data.status === 'success') {
+                    console.log('[CODE-SUBMIT] ✅ Code verified successfully');
+                    message.innerHTML = '<div class="code-message success">✅ Kode benar! Ujian selesai.</div>';
+                    
+                    // Hide exam end section
+                    document.getElementById('exam-end-section').classList.remove('show');
+                    
+                    // Enable logout button
+                    const logoutBtn = document.getElementById('logout-btn');
+                    logoutBtn.disabled = false;
+                    logoutBtn.title = '';
+                    
+                    console.log('[CODE-SUBMIT] Logout button enabled');
+                    
+                    // Clear input
+                    document.getElementById('exam-end-code-input').value = '';
+                    
+                    // Show final summary
+                    setTimeout(() => {
+                        showAlert('Sukses', `✅ Ujian Selesai\n\nTotal Pelanggaran: ${data.total_violations || 0}\nDurasi Ujian: ${data.duration_seconds || 0} detik\n\nAnda sekarang dapat logout.`);
+                    }, 500);
+
+                } else {
+                    console.log('[CODE-SUBMIT] ❌ Code incorrect');
+                    message.innerHTML = '<div class="code-message error">❌ Kode salah! Coba lagi.</div>';
+                    document.getElementById('exam-end-code-input').value = '';
+                    document.getElementById('exam-end-code-input').focus();
+                }
+            } catch (error) {
+                console.error('[CODE-SUBMIT] Error:', error);
+                message.innerHTML = `<div class="code-message error">❌ Error: ${error.message}</div>`;
+            }
+        }
+
+        /**
+         * Handle logout click
+         */
+        function handleLogoutClick() {
+            console.log('[LOGOUT] Logout button clicked');
+            
+            if (confirm('Apakah Anda yakin ingin logout?')) {
+                console.log('[LOGOUT] User confirmed logout');
+                window.location.href = '{{ url_for("participant_logout") }}';
+            } else {
+                console.log('[LOGOUT] User cancelled logout');
+            }
+        }
+
+        /**
+         * Show alert modal
+         */
+        function showAlert(title, message) {
+            document.getElementById('alert-title').textContent = title;
+            document.getElementById('alert-message').textContent = message;
+            document.getElementById('alert-modal').classList.add('show');
+        }
+
+        /**
+         * Close alert modal
+         */
+        function closeAlertModal() {
+            document.getElementById('alert-modal').classList.remove('show');
+        }
+
+        /**
+         * Initialize on page load
+         */
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('[DASHBOARD] Page loaded, initialization complete');
+            
+            // Allow Enter to submit code
+            const codeInput = document.getElementById('exam-end-code-input');
+            if (codeInput) {
+                codeInput.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        submitExamEndCode();
+                    }
+                });
+            }
+
+            // Prevent closing window with exam active
+            window.addEventListener('beforeunload', function(e) {
+                if (isExamActive && examWindow && !examWindow.closed) {
+                    e.preventDefault();
+                    e.returnValue = '';
+                    console.log('[DASHBOARD] Prevented window close during exam');
+                    return '';
+                }
+            });
+
+            // Warn if trying to close exam window
+            if (examWindow && !examWindow.closed) {
+                examWindow.addEventListener('beforeunload', function(e) {
+                    console.log('[EXAM-WINDOW] Close prevented');
+                    e.preventDefault();
+                    e.returnValue = '';
+                });
+            }
+        });
+    </script>
+</body>
+</html>

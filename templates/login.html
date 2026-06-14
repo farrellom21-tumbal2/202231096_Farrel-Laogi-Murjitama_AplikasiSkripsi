@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login Peserta - Proctoring App</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-box">
+            <div class="login-header">
+                <h1>Peserta Login</h1>
+                <p class="subtitle">Proctoring System</p>
+            </div>
+            
+            {% if error %}
+                <div class="error-message">
+                    ❌ {{ error }}
+                </div>
+            {% endif %}
+            
+            <form method="POST" class="login-form">
+                <div class="form-group">
+                    <label for="participant_number">Nomor Peserta</label>
+                    <input 
+                        type="text" 
+                        id="participant_number" 
+                        name="participant_number" 
+                        placeholder="Masukkan nomor peserta (contoh: P001)" 
+                        autofocus
+                        required
+                    >
+                </div>
+                
+                <button type="submit" class="login-btn">Login</button>
+            </form>
+            
+            <div class="login-info">
+                <p>Gunakan nomor peserta yang telah diberikan oleh admin untuk login ke sistem ujian.</p>
+            </div>
+            
+            <div class="admin-link">
+                <a href="{{ url_for('login') }}" class="admin-login-link">Admin? Login di sini</a>
+            </div>
+            
+            <div class="footer-text">
+                <p>© 2024 Proctoring App. All rights reserved.</p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

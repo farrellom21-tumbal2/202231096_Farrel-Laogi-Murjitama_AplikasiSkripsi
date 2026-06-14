@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kelola Sesi Ujian - Proctoring App</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="dashboard-container">
+        <!-- Navbar -->
+        <nav class="navbar">
+            <div class="navbar-content">
+                <h2 class="navbar-title">Proctoring App</h2>
+                <div class="navbar-user">
+                    <span class="user-greeting">Selamat datang, Admin!</span>
+                    <a href="{{ url_for('logout') }}" class="logout-btn">Logout</a>
+                </div>
+            </div>
+        </nav>
+        
+        <!-- Main Content -->
+        <div class="dashboard-content">
+            <div class="dashboard-header">
+                <div class="header-top">
+                    <div>
+                        <h1>Kelola Sesi Ujian</h1>
+                        <p class="dashboard-subtitle">Tambahkan dan kelola sesi ujian</p>
+                    </div>
+                    <a href="{{ url_for('dashboard') }}" class="back-btn">← Kembali ke Dashboard</a>
+                </div>
+            </div>
+            
+            <!-- Error Message -->
+            {% if error %}
+                <div class="error-message">
+                    ❌ {{ error }}
+                </div>
+            {% endif %}
+            
+            <!-- Form Tambah Session -->
+            <div class="form-card">
+                <h2>Tambah Sesi Ujian Baru</h2>
+                <form method="POST" class="session-form">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="session_name">Nama Sesi</label>
+                            <input 
+                                type="text" 
+                                id="session_name" 
+                                name="session_name" 
+                                placeholder="Contoh: Ujian Matematika - Kelas 10A" 
+                                required
+                            >
+                        </div>
+                        <div class="form-group">
+                            <label for="exam_end_code">Kode Akhir Ujian</label>
+                            <input 
+                                type="text" 
+                                id="exam_end_code" 
+                                name="exam_end_code" 
+                                placeholder="Contoh: SELESAI123" 
+                                required
+                            >
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="start_time">Waktu Mulai</label>
+                            <input 
+                                type="datetime-local" 
+                                id="start_time" 
+                                name="start_time" 
+                                required
+                            >
+                        </div>
+                        <div class="form-group">
+                            <label for="end_time">Waktu Selesai</label>
+                            <input 
+                                type="datetime-local" 
+                                id="end_time" 
+                                name="end_time" 
+                                required
+                            >
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="exam_url">URL Ujian</label>
+                            <input 
+                                type="url" 
+                                id="exam_url" 
+                                name="exam_url" 
+                                placeholder="https://example.com/exam" 
+                                required
+                            >
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="submit-btn">Tambah Sesi</button>
+                </form>
+            </div>
+            
+            <!-- Daftar Sessions -->
+            <div class="sessions-card">
+                <h2>Daftar Sesi Ujian</h2>
+                
+                {% if sessions %}
+                    <div class="sessions-table">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>No</th>
+                                    <th>Nama Sesi</th>
+                                    <th>Waktu Mulai</th>
+                                    <th>Waktu Selesai</th>
+                                    <th>URL Ujian</th>
+                                    <th>Dibuat Tanggal</th>
+                                    <th>Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for sess in sessions %}
+                                    <tr>
+                                        <td>{{ loop.index }}</td>
+                                        <td>{{ sess.session_name }}</td>
+                                        <td>{{ sess.start_time }}</td>
+                                        <td>{{ sess.end_time }}</td>
+                                        <td>
+                                            <a href="{{ sess.exam_url }}" target="_blank" class="url-link">
+                                                Buka →
+                                            </a>
+                                        </td>
+                                        <td>{{ sess.created_at }}</td>
+                                        <td>
+                                            <div class="action-buttons">
+                                                <a href="{{ url_for('edit_session', session_id=sess.id) }}" class="edit-btn">Edit</a>
+                                                <form method="POST" action="{{ url_for('delete_session', session_id=sess.id) }}" class="delete-form">
+                                                    <button type="submit" class="delete-btn" onclick="return confirm('Yakin hapus sesi ini?')">Hapus</button>
+                                                </form>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="empty-state">
+                        <p>Belum ada sesi ujian. Tambahkan sesi baru terlebih dahulu.</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</body>
+</html>
