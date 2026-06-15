@@ -1,6 +1,9 @@
 # Core Framework & Web Server
 Flask==2.3.0
 python-dotenv==1.2.1
+cmake
+dlib
+
 
 # Database
 mysql-connector-python==9.5.0
